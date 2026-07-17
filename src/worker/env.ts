@@ -1,3 +1,5 @@
+import type { Session } from "./session";
+
 export type Env = {
   KV: KVNamespace;
   TUMBLR_CLIENT_ID: string;
@@ -6,5 +8,5 @@ export type Env = {
 
 export type AppEnv = {
   Bindings: Env;
-  Variables: { session: unknown; sid: string };
+  Variables: { session: Session; sid: string };
 };
