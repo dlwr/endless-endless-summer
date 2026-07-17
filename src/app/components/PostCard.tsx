@@ -65,7 +65,12 @@ export function PostCard({
           ))}
         </div>
         <div className="post-actions">
-          <button type="button" onClick={onLike} aria-label="like">
+          <button
+            type="button"
+            onClick={onLike}
+            aria-label="like"
+            aria-pressed={post.liked}
+          >
             {post.liked ? "♥" : "♡"}
           </button>
           <button type="button" onClick={onReblog} aria-label="reblog">

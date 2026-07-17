@@ -1,0 +1,740 @@
+:root {
+  /* --- Global Constraints (fixed tokens, do not change) --- */
+  --bg: #001935;
+  --surface: #0f2440;
+  --card: #ffffff;
+  --card-text: #1a2735;
+  --card-muted: #6b7b8d;
+  --text: #ffffff;
+  --muted: #a3b1c2;
+  --accent: #00b8ff;
+  --column: 540px;
+  --radius: 6px;
+
+  /* --- Derived accents (homage, not constrained) --- */
+  /* accent-ink: darkened accent for text-on-white (~4.9:1 contrast), since
+     raw --accent fails AA contrast on the white card surface. */
+  --accent-ink: #0077b3;
+  --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 55%, transparent);
+  --like: #ff5c77;
+  --horizon: #ff9d6c;
+  --line: color-mix(in srgb, var(--text) 12%, transparent);
+  --card-line: color-mix(in srgb, var(--card-text) 10%, transparent);
+  --shadow: 0 12px 32px -12px rgba(0, 8, 20, 0.55);
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  /* the one atmospheric risk: a late-summer dusk glow behind the dashboard,
+     quiet enough to read as "navy background" at a glance */
+  background-image:
+    radial-gradient(
+      ellipse 60% 40% at 50% 100%,
+      color-mix(in srgb, var(--horizon) 16%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 50% 35% at 50% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 70%
+    );
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ログイン画面 */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.login-screen h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 32px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.login-screen p {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
+  font-size: 1rem;
+  font-style: italic;
+}
+
+.login-button {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+  padding: 0.75rem 2rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 24px -8px var(--accent-glow);
+  transition:
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+
+.login-button:hover {
+  background: color-mix(in srgb, var(--accent) 88%, white);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -8px var(--accent-glow);
+}
+
+.login-button:active {
+  transform: translateY(0);
+}
+
+/* フィード */
+.feed-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.feed-header h1 {
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.feed-user {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-left: auto;
+}
+
+.feed-header button[aria-label="settings"] {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition:
+    color 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.feed-header button[aria-label="settings"]:hover {
+  color: var(--text);
+  transform: rotate(20deg);
+}
+
+.feed-posts {
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 1.5rem 0 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.feed-sentinel {
+  text-align: center;
+  color: var(--muted);
+  padding: 1rem;
+  font-size: 0.9rem;
+}
+
+/* ポストカード */
+.post-card {
+  background: var(--card);
+  color: var(--card-text);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 2px solid transparent;
+  box-shadow: var(--shadow);
+  position: relative;
+  transition:
+    box-shadow 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+
+.post-card.focused {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 4px var(--accent-ring),
+    var(--shadow);
+}
+
+/* signature: the focused post reads a blinking keyboard caret in its own
+   header, like a terminal prompt sitting at "the current line" — this is a
+   keyboard-driven dashboard, so focus is not an afterthought outline. It
+   lives inline in the header flow, so it needs no viewport-specific
+   fallback and is never clipped by the card's own overflow:hidden. */
+.post-card.focused .post-header::before {
+  content: "▍";
+  color: var(--accent);
+  margin-right: 0.5rem;
+  animation: caret-blink 1s steps(1, jump-none) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.post-card img,
+.post-card video,
+.post-card iframe {
+  max-width: 100%;
+  width: 100%;
+  display: block;
+}
+
+.post-card video {
+  background: #000;
+}
+
+.post-card iframe {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  border: 0;
+}
+
+.post-header,
+.post-footer,
+.own-content,
+.trail-item {
+  padding: 0.75rem 1rem;
+}
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-weight: 700;
+  border-bottom: 1px solid var(--card-line);
+}
+
+.post-date {
+  color: var(--card-muted);
+  font-weight: 400;
+  text-decoration: none;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+a.post-date:hover {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+
+/* reblog trail: a quiet left rule threads consecutive trail entries
+   together, the way the dashboard's reblog chain reads as one lineage
+   rather than a stack of unrelated quotes */
+.trail-item {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--card-line);
+  border-bottom: 1px solid var(--card-line);
+}
+
+.trail-blog-name {
+  margin: 0 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--card-muted);
+}
+
+.own-content {
+  padding: 0.75rem 1rem;
+}
+
+.trail-item + .own-content {
+  border-top: 1px solid var(--card-line);
+}
+
+.post-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-top: 1px solid var(--card-line);
+}
+
+.post-tags {
+  color: var(--card-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.post-tag {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-ink);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.post-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.post-actions button {
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--card-muted);
+  padding: 0.3rem 0.45rem;
+  border-radius: 6px;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.post-actions button:hover {
+  color: var(--card-text);
+  background: color-mix(in srgb, var(--card-text) 6%, transparent);
+}
+
+.post-actions button:active {
+  transform: scale(0.92);
+}
+
+.post-actions button[aria-label="like"][aria-pressed="true"] {
+  color: var(--like);
+}
+
+.post-actions button[aria-label="reblog"]:hover,
+.post-actions button[aria-label="reblog with comment"]:hover {
+  color: var(--accent-ink);
+}
+
+/* NPF コンテンツ (テキスト、画像、リンクカード、chat、音声、動画) */
+.post-card p {
+  margin: 0 0 0.75rem;
+}
+
+.post-card p:last-child {
+  margin-bottom: 0;
+}
+
+.post-card h2,
+.post-card h3 {
+  margin: 0 0 0.5rem;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--card-text);
+}
+
+.post-card h2 {
+  font-size: 1.3rem;
+}
+
+.post-card h3 {
+  font-size: 1.1rem;
+}
+
+.post-card blockquote {
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: var(--card-muted);
+  font-style: italic;
+}
+
+.post-card ol,
+.post-card ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.4rem;
+}
+
+.post-card li {
+  margin-bottom: 0.25rem;
+}
+
+.npf-link a {
+  font-weight: 700;
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+
+.npf-link a:hover {
+  text-decoration: underline;
+}
+
+.post-card .own-content a,
+.post-card .trail-item a {
+  color: var(--accent-ink);
+}
+
+.post-card .own-content a:hover,
+.post-card .trail-item a:hover {
+  text-decoration: underline;
+}
+
+.npf-chat {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--card-text) 5%, var(--card));
+  border-radius: 4px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.npf-link {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--card-line);
+  border-radius: 6px;
+  transition:
+    border-color 0.15s var(--ease),
+    background 0.15s var(--ease);
+}
+
+.npf-link:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.npf-link p {
+  margin: 0.35rem 0 0;
+  color: var(--card-muted);
+  font-size: 0.9rem;
+}
+
+.npf-audio {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--card-text) 4%, var(--card));
+  border-radius: 6px;
+}
+
+.npf-audio figcaption {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.npf-audio audio {
+  width: 100%;
+}
+
+/* オーバーレイ類 */
+.help-overlay,
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 10, 25, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1.5rem;
+  animation: overlay-in 0.15s var(--ease);
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.help-panel,
+.reblog-dialog,
+.settings-panel {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  min-width: 320px;
+  box-shadow: var(--shadow);
+}
+
+.help-panel h2,
+.reblog-dialog h2,
+.settings-panel h2 {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.help-panel dl {
+  margin: 0;
+}
+
+.help-row {
+  display: flex;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+}
+
+.help-row:last-child {
+  border-bottom: none;
+}
+
+.help-row dt {
+  flex: 0 0 auto;
+  min-width: 6.5rem;
+}
+
+.help-row dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+kbd {
+  background: color-mix(in srgb, black 40%, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.reblog-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(90vw, 480px);
+}
+
+.reblog-dialog label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.reblog-dialog textarea,
+.reblog-dialog input,
+.reblog-dialog select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  width: 100%;
+}
+
+.reblog-dialog textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.dialog-actions button {
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  transition:
+    background 0.15s var(--ease),
+    transform 0.15s var(--ease);
+}
+
+.dialog-actions button:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.dialog-actions button:active {
+  transform: scale(0.97);
+}
+
+.dialog-actions button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: transparent;
+}
+
+.dialog-actions button.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+.settings-panel {
+  position: fixed;
+  top: 3.5rem;
+  right: 1rem;
+  z-index: 50;
+  min-width: 200px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.settings-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.settings-panel > button {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.settings-panel > button:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 700;
+  padding: 0.5rem 1.25rem;
+  border-radius: 999px;
+  z-index: 200;
+  box-shadow: var(--shadow);
+  animation: toast-in 0.2s var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* レスポンシブ: 540px カラムより狭いビューポートでの余白調整 */
+@media (max-width: 600px) {
+  .feed-posts {
+    padding: 1rem 0.75rem 3rem;
+    gap: 1rem;
+  }
+
+  .feed-header {
+    padding: 0.6rem 0.85rem;
+  }
+
+  .help-overlay,
+  .dialog-backdrop {
+    padding: 1rem;
+  }
+
+  .help-panel,
+  .reblog-dialog,
+  .settings-panel {
+    min-width: 0;
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .settings-panel {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* prefers-reduced-motion: すべてのトランジション/アニメーションを無効化 */
+@media (prefers-reduced-motion: reduce) {
+  .login-button,
+  .login-button:hover,
+  .feed-header button[aria-label="settings"],
+  .feed-header button[aria-label="settings"]:hover,
+  .post-card,
+  .post-actions button,
+  .post-actions button:active,
+  .npf-link,
+  .dialog-actions button,
+  .dialog-actions button:active {
+    transition: none;
+    transform: none;
+  }
+
+  .post-card.focused .post-header::before,
+  .help-overlay,
+  .dialog-backdrop,
+  .toast {
+    animation: none;
+  }
+}
