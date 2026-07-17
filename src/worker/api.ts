@@ -42,4 +42,35 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
     );
     return c.json({ posts });
   });
+
+  app.post("/api/like", requireSession(), async (c) => {
+    const { id, reblogKey, like } = await c.req.json<{
+      id: string;
+      reblogKey: string;
+      like: boolean;
+    }>();
+    const client = clientForSession(c, deps);
+    if (like) {
+      await client.like(id, reblogKey);
+    } else {
+      await client.unlike(id, reblogKey);
+    }
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/reblog", requireSession(), async (c) => {
+    const { id, reblogKey, blogName, comment, tags } = await c.req.json<{
+      id: string;
+      reblogKey: string;
+      blogName?: string;
+      comment?: string;
+      tags?: string;
+    }>();
+    const session = c.get("session");
+    const target = blogName ?? session.blogs.find((b) => b.primary)?.name;
+    if (!target) return c.json({ error: "no target blog" }, 400);
+    const client = clientForSession(c, deps);
+    await client.reblog(target, { id, reblogKey: reblogKey, comment, tags });
+    return c.json({ ok: true });
+  });
 }
