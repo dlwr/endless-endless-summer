@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { AppDeps } from "./app";
 import type { AppEnv } from "./env";
+import { buildFeed } from "./feed";
 import { requireSession, SessionStore } from "./session";
 import { TumblrClient } from "./tumblr";
 
@@ -24,9 +25,21 @@ export function clientForSession(
   );
 }
 
-export function registerApiRoutes(app: Hono<AppEnv>, _deps: AppDeps): void {
+export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   app.get("/api/me", requireSession(), (c) => {
     const session = c.get("session");
     return c.json({ userName: session.userName, blogs: session.blogs });
+  });
+
+  app.get("/api/feed", requireSession(), async (c) => {
+    const client = clientForSession(c, deps);
+    const posts = await buildFeed(
+      client,
+      c.env.KV,
+      c.get("session").userName,
+      Math.random,
+      Math.floor(Date.now() / 1000),
+    );
+    return c.json({ posts });
   });
 }
