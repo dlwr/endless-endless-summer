@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeedPost, Me, PostKind } from "../../shared/types";
@@ -276,5 +276,145 @@ describe("Feed settings", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "image" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("設定パネルが開いている間は j でフォーカスが動かない", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ posts: [post("1"), post("2")] })),
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.click(screen.getByRole("button", { name: "settings" }));
+    await userEvent.keyboard("j");
+    const articles = screen.getAllByRole("article");
+    expect(articles[0]).toHaveClass("focused");
+  });
+});
+
+describe("Feed open ショートカット", () => {
+  it("危険な postUrl は o で window.open されない", async () => {
+    const openMock = vi.fn();
+    vi.stubGlobal("open", openMock);
+    const maliciousPost = { ...post("1"), postUrl: "javascript:alert(1)" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ posts: [maliciousPost] })),
+    );
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.keyboard("o");
+    expect(openMock).not.toHaveBeenCalled();
+  });
+
+  it("安全な postUrl は o で window.open される", async () => {
+    const openMock = vi.fn();
+    vi.stubGlobal("open", openMock);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ posts: [post("1")] })),
+    );
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.keyboard("o");
+    expect(openMock).toHaveBeenCalledWith(
+      "https://blog.tumblr.com/post/1",
+      "_blank",
+      "noopener",
+    );
+  });
+});
+
+describe("Feed エラー表示", () => {
+  it("フィード取得が失敗するとエラー表示が出てクラッシュしない", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("boom", { status: 500 })),
+    );
+    render(<Feed me={me} />);
+    expect(
+      await screen.findByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("feed")).toBeInTheDocument();
+  });
+
+  it("Retry ボタンで再取得される", async () => {
+    let shouldFail = true;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed")) {
+        if (shouldFail) return new Response("boom", { status: 500 });
+        return Response.json({ posts: [post("1")] });
+      }
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Feed me={me} />);
+    await screen.findByRole("button", { name: "Retry" });
+
+    shouldFail = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await screen.findByText("post 1");
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("Feed 無限スクロールの空フィルタ", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("マッチしないフィルタでは sentinel が何度交差しても fetch はループしない", async () => {
+    localStorage.setItem(
+      "ees:settings",
+      JSON.stringify({
+        kinds: {
+          text: false,
+          image: false,
+          link: false,
+          audio: false,
+          video: true,
+        },
+      }),
+    );
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      Response.json({ posts: [post("1", "text"), post("2", "text")] }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const observerCallbackRef: {
+      current: ((entries: { isIntersecting: boolean }[]) => void) | null;
+    } = { current: null };
+    class FakeIntersectionObserver {
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        observerCallbackRef.current = cb;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    render(<Feed me={me} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    for (let i = 0; i < 10; i++) {
+      observerCallbackRef.current?.([{ isIntersecting: true }]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    const feedCalls = fetchMock.mock.calls.filter(([u]) =>
+      String(u).includes("/api/feed"),
+    ).length;
+    expect(feedCalls).toBeLessThanOrEqual(4);
   });
 });

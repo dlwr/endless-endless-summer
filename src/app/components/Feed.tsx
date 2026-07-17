@@ -3,6 +3,7 @@ import type { FeedPost, Me } from "../../shared/types";
 import { likePost, reblogPost } from "../api";
 import { useFeed } from "../hooks/useFeed";
 import { useShortcuts } from "../hooks/useShortcuts";
+import { safeUrl } from "../npf/safe-url";
 import type { FilterSettings } from "../settings";
 import { loadSettings, saveSettings } from "../settings";
 import type { ShortcutAction } from "../shortcuts";
@@ -12,8 +13,10 @@ import { ReblogDialog } from "./ReblogDialog";
 import { SettingsPanel } from "./SettingsPanel";
 import { Toast } from "./Toast";
 
+const MAX_CONSECUTIVE_EMPTY_ROUNDS = 3;
+
 export function Feed({ me }: { me: Me }) {
-  const { posts, loading, loadMore, reroll } = useFeed();
+  const { posts, loading, error, loadMore, reroll } = useFeed();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [dialogIndex, setDialogIndex] = useState<number | null>(null);
@@ -28,6 +31,10 @@ export function Feed({ me }: { me: Me }) {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  // sentinel が交差通知を出しても visiblePosts が増えなかった("空振り")回数。
+  // フィルタに一致するポストが無い場合に fetch を無限に繰り返さないための上限に使う。
+  const emptyRoundsRef = useRef(0);
+  const prevVisibleLengthRef = useRef(0);
 
   const visiblePosts = useMemo(
     () => posts.filter((p) => settings.kinds[p.kind]),
@@ -43,6 +50,7 @@ export function Feed({ me }: { me: Me }) {
     setFocusedIndex(0);
     setPostOverrides({});
     setDialogIndex(null);
+    emptyRoundsRef.current = 0;
   }, []);
 
   useEffect(() => {
@@ -52,6 +60,14 @@ export function Feed({ me }: { me: Me }) {
   useEffect(() => {
     return () => clearTimeout(toastTimer.current);
   }, []);
+
+  useEffect(() => {
+    // /api/feed が 401 を返したのはセッションが切れたということなので、
+    // リロードして認証ゲート(ログイン画面)を再表示させる。
+    if (error?.includes("401")) {
+      location.reload();
+    }
+  }, [error]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -102,12 +118,25 @@ export function Feed({ me }: { me: Me }) {
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
+    // visiblePosts が増えていれば、今まさに有効なフィルタでコンテンツが
+    // 見つかっているということなので空振りカウントをリセットする。
+    if (visiblePosts.length > prevVisibleLengthRef.current) {
+      emptyRoundsRef.current = 0;
+    }
+    prevVisibleLengthRef.current = visiblePosts.length;
+    // visiblePosts.length を deps に含めることで、バッチが 0 件の visible
+    // ポストしか追加しなかった場合でも observer を作り直し、交差通知を
+    // 再度発火させる(そうしないと sentinel の交差比率が変化せず二度と
+    // loadMore が呼ばれなくなる)。
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) loadMore();
+      if (!entries.some((e) => e.isIntersecting)) return;
+      if (emptyRoundsRef.current >= MAX_CONSECUTIVE_EMPTY_ROUNDS) return;
+      emptyRoundsRef.current += 1;
+      loadMore();
     });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [loadMore, visiblePosts.length]);
 
   const focusPost = useCallback((index: number) => {
     setFocusedIndex(index);
@@ -128,12 +157,15 @@ export function Feed({ me }: { me: Me }) {
         case "prev":
           if (focusedIndex > 0) focusPost(focusedIndex - 1);
           break;
-        case "open":
-          if (post) window.open(post.postUrl, "_blank", "noopener");
+        case "open": {
+          const url = post ? safeUrl(post.postUrl) : null;
+          if (url) window.open(url, "_blank", "noopener");
           break;
+        }
         case "reroll":
           setFocusedIndex(0);
           setPostOverrides({});
+          emptyRoundsRef.current = 0;
           reroll();
           break;
         case "help":
@@ -163,7 +195,7 @@ export function Feed({ me }: { me: Me }) {
     ],
   );
 
-  useShortcuts(handleAction, dialogIndex === null);
+  useShortcuts(handleAction, dialogIndex === null && !settingsOpen);
 
   const submitDialogReblog = useCallback(
     (input: { blogName: string; comment: string; tags: string }) => {
@@ -215,7 +247,18 @@ export function Feed({ me }: { me: Me }) {
           </div>
         ))}
         <div ref={sentinelRef} className="feed-sentinel">
-          {loading ? "loading…" : ""}
+          {error ? (
+            <div className="feed-error">
+              <span>{error}</span>
+              <button type="button" onClick={() => loadMore()}>
+                Retry
+              </button>
+            </div>
+          ) : loading ? (
+            "loading…"
+          ) : (
+            ""
+          )}
         </div>
       </main>
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}

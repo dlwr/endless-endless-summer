@@ -96,4 +96,55 @@ describe("useFeed", () => {
 
     expect(result.current.posts.map((p) => p.id)).toEqual(["B"]);
   });
+
+  it("reroll 連打では fetch は 1 回しか呼ばれない", async () => {
+    stubFeedBatches([[post("1")]]);
+    const { result } = renderHook(() => useFeed());
+    await act(async () => {
+      await Promise.all([result.current.reroll(), result.current.reroll()]);
+    });
+    expect(vi.mocked(fetch).mock.calls.length).toBe(1);
+  });
+});
+
+describe("useFeed エラーハンドリング", () => {
+  it("loadMore が失敗したら error にメッセージをセットする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("boom", { status: 500 })),
+    );
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+    expect(result.current.error).toBeTruthy();
+    expect(result.current.posts).toEqual([]);
+  });
+
+  it("loadMore が失敗した後リトライして成功すると error がクリアされる", async () => {
+    let shouldFail = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        if (shouldFail) return new Response("boom", { status: 500 });
+        return Response.json({ posts: [post("1")] });
+      }),
+    );
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+    expect(result.current.error).toBeTruthy();
+
+    shouldFail = false;
+    await act(() => result.current.loadMore());
+    expect(result.current.error).toBeNull();
+    expect(result.current.posts.map((p) => p.id)).toEqual(["1"]);
+  });
+
+  it("reroll が失敗したら error にメッセージをセットする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("boom", { status: 500 })),
+    );
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.reroll());
+    expect(result.current.error).toBeTruthy();
+  });
 });

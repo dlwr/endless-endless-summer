@@ -188,6 +188,24 @@ body {
   font-size: 0.9rem;
 }
 
+.feed-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--like);
+}
+
+.feed-error button {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 /* ポストカード */
 .post-card {
   background: var(--card);
