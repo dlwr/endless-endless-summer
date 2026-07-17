@@ -50,17 +50,20 @@ export function registerAuthRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
       redirectUri(c.req.url),
       deps.fetchFn,
     );
+    let currentTokens = tokens;
     const client = new TumblrClient(
       tokens,
       creds,
-      async () => {},
+      async (t) => {
+        currentTokens = t;
+      },
       deps.fetchFn,
     );
     const user = await client.userInfo();
 
     const store = new SessionStore(c.env.KV);
     const sid = await store.create({
-      tokens,
+      tokens: currentTokens,
       userName: user.name,
       blogs: user.blogs,
     });

@@ -76,21 +76,33 @@ export async function buildFeed(
     () => following[Math.floor(rng() * following.length)],
   );
 
-  const batches = await Promise.all(
+  const results = await Promise.all(
     samples.map(async (blog) => {
       const boundKey = `oldest:${blog.name}`;
       const notBefore =
         ((await kv.get(boundKey, "json")) as number | null) ?? TUMBLR_EPOCH;
       const before = sampleTimestamp(notBefore, now, rng);
-      const posts = await client.posts(blog.name, before, POSTS_PER_SAMPLE);
-      if (posts.length === 0) {
-        // 「before 以前にポストは無い」と学習し、次回以降のサンプル範囲を狭める
-        await kv.put(boundKey, JSON.stringify(before));
-        return [];
+      try {
+        const posts = await client.posts(blog.name, before, POSTS_PER_SAMPLE);
+        if (posts.length === 0) {
+          // 「before 以前にポストは無い」と学習し、次回以降のサンプル範囲を狭める
+          await kv.put(boundKey, JSON.stringify(before));
+          return { ok: true, posts: [] as FeedPost[] };
+        }
+        return { ok: true, posts: posts.map(normalizePost) };
+      } catch {
+        // 死んだ/非公開ブログや 429 などで単一サンプルが失敗しても feed 全体は失敗させない
+        return { ok: false, posts: [] as FeedPost[] };
       }
-      return posts.map(normalizePost);
     }),
   );
 
-  return shuffle(batches.flat(), rng);
+  if (results.every((r) => !r.ok)) {
+    throw new Error("all feed samples failed");
+  }
+
+  return shuffle(
+    results.flatMap((r) => r.posts),
+    rng,
+  );
 }

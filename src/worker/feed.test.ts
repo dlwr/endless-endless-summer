@@ -145,4 +145,53 @@ describe("buildFeed", () => {
     );
     expect(posts).toEqual([]);
   });
+
+  function cyclicRng(sequence: number[]) {
+    let i = 0;
+    return () => sequence[i++ % sequence.length];
+  }
+
+  it("一部のブログで posts が例外を投げても他のブログのポストは返す", async () => {
+    const following = [{ name: "a" }, { name: "b" }, { name: "c" }];
+    const postsByBlog: Record<string, RawPost[]> = {
+      a: [rawPost({ id_string: "a1" })],
+      b: [rawPost({ id_string: "b1" })],
+      c: [rawPost({ id_string: "c1" })],
+    };
+    const client = {
+      following: async () => following,
+      posts: async (blog: string, _before: number, _limit: number) => {
+        if (blog === "b") throw new Error("blog is private (404)");
+        return postsByBlog[blog] ?? [];
+      },
+    };
+    const kv = new FakeKV();
+    // following.length === 3 なので 0, 1/3, 2/3 を繰り返せば a,b,c が均等に選ばれる
+    const rng = cyclicRng([0, 1 / 3, 2 / 3]);
+    const posts = await buildFeed(
+      client,
+      kv as unknown as KVNamespace,
+      "u",
+      rng,
+      now,
+    );
+    const ids = posts.map((p) => p.id);
+    expect(ids).not.toContain("b1");
+    expect(ids).toContain("a1");
+    expect(ids).toContain("c1");
+  });
+
+  it("すべてのブログで posts が例外を投げたら buildFeed は reject する", async () => {
+    const following = [{ name: "x" }];
+    const client = {
+      following: async () => following,
+      posts: async () => {
+        throw new Error("rate limited (429)");
+      },
+    };
+    const kv = new FakeKV();
+    await expect(
+      buildFeed(client, kv as unknown as KVNamespace, "u", () => 0.5, now),
+    ).rejects.toThrow();
+  });
 });
