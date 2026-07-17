@@ -1,5 +1,6 @@
 import type { FeedPost } from "../../shared/types";
 import { NpfContent } from "../npf/NpfContent";
+import { safeUrl } from "../npf/safe-url";
 
 type Props = {
   post: FeedPost;
@@ -14,6 +15,7 @@ function formatDate(timestamp: number): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -24,18 +26,23 @@ export function PostCard({
   onReblog,
   onReblogDialog,
 }: Props) {
+  const href = safeUrl(post.postUrl);
   return (
     <article className={`post-card${focused ? " focused" : ""}`}>
       <header className="post-header">
         <span className="post-blog-name">{post.blogName}</span>
-        <a
-          className="post-date"
-          href={post.postUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {formatDate(post.timestamp)}
-        </a>
+        {href ? (
+          <a
+            className="post-date"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {formatDate(post.timestamp)}
+          </a>
+        ) : (
+          <span className="post-date">{formatDate(post.timestamp)}</span>
+        )}
       </header>
       {post.trail.map((item, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: trail は順序固定

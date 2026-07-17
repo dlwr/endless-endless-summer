@@ -61,4 +61,10 @@ describe("PostCard", () => {
     renderCard(basePost);
     expect(screen.getByText(/Jun 28, 2007/)).toBeInTheDocument();
   });
+
+  it("postUrl が javascript: スキームならアンカーを描画しない(date テキストは表示される)", () => {
+    renderCard({ ...basePost, postUrl: "javascript:alert(1)" });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByText(/Jun 28, 2007/)).toBeInTheDocument();
+  });
 });

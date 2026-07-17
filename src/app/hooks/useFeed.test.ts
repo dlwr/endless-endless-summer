@@ -57,4 +57,43 @@ describe("useFeed", () => {
       expect(result.current.posts.map((p) => p.id)).toEqual(["2"]);
     });
   });
+
+  it("loadMore 進行中に reroll すると古いバッチは捨てられる", async () => {
+    let resolveLoadMore!: (batch: FeedPost[]) => void;
+    let resolveReroll!: (batch: FeedPost[]) => void;
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        call++;
+        const batch = await new Promise<FeedPost[]>((resolve) => {
+          if (call === 1) resolveLoadMore = resolve;
+          else resolveReroll = resolve;
+        });
+        return Response.json({ posts: batch });
+      }),
+    );
+    const { result } = renderHook(() => useFeed());
+
+    let loadMorePromise!: Promise<void>;
+    act(() => {
+      loadMorePromise = result.current.loadMore();
+    });
+    await waitFor(() => expect(resolveLoadMore).toBeDefined());
+
+    let rerollPromise!: Promise<void>;
+    act(() => {
+      rerollPromise = result.current.reroll();
+    });
+    await waitFor(() => expect(resolveReroll).toBeDefined());
+
+    resolveLoadMore([post("A")]);
+    resolveReroll([post("B")]);
+
+    await act(async () => {
+      await Promise.all([loadMorePromise, rerollPromise]);
+    });
+
+    expect(result.current.posts.map((p) => p.id)).toEqual(["B"]);
+  });
 });
