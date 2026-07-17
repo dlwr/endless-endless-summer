@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Me } from "../shared/types";
 import { fetchMe } from "./api";
+import { Feed } from "./components/Feed";
 import { LoginScreen } from "./components/LoginScreen";
 
 type AuthState =
@@ -21,5 +22,5 @@ export function App() {
 
   if (auth.status === "loading") return null;
   if (auth.status === "anonymous") return <LoginScreen />;
-  return <div data-testid="feed">feed</div>;
+  return <Feed me={auth.me} />;
 }
