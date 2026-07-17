@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedPost, Me } from "../../shared/types";
 import { likePost, reblogPost } from "../api";
 import { useFeed } from "../hooks/useFeed";
 import { useShortcuts } from "../hooks/useShortcuts";
+import type { FilterSettings } from "../settings";
+import { loadSettings, saveSettings } from "../settings";
 import type { ShortcutAction } from "../shortcuts";
 import { HelpOverlay } from "./HelpOverlay";
 import { PostCard } from "./PostCard";
 import { ReblogDialog } from "./ReblogDialog";
+import { SettingsPanel } from "./SettingsPanel";
 import { Toast } from "./Toast";
 
 export function Feed({ me }: { me: Me }) {
@@ -18,11 +21,28 @@ export function Feed({ me }: { me: Me }) {
     Record<number, Partial<FeedPost>>
   >({});
   const [toast, setToast] = useState<string | null>(null);
+  const [settings, setSettings] = useState(loadSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+
+  const visiblePosts = useMemo(
+    () => posts.filter((p) => settings.kinds[p.kind]),
+    [posts, settings],
+  );
+
+  const updateSettings = useCallback((next: FilterSettings) => {
+    setSettings(next);
+    saveSettings(next);
+    // フィルタ変更で visiblePosts の index 空間がずれるため、focus と
+    // index キー付きの楽観更新オーバーライドをリセットする
+    // (Task 11 の reroll 修正と同じクラスのバグを防ぐ)
+    setFocusedIndex(0);
+    setPostOverrides({});
+  }, []);
 
   useEffect(() => {
     loadMore();
@@ -40,8 +60,10 @@ export function Feed({ me }: { me: Me }) {
 
   const viewPost = useCallback(
     (index: number): FeedPost | undefined =>
-      posts[index] ? { ...posts[index], ...postOverrides[index] } : undefined,
-    [posts, postOverrides],
+      visiblePosts[index]
+        ? { ...visiblePosts[index], ...postOverrides[index] }
+        : undefined,
+    [visiblePosts, postOverrides],
   );
 
   const toggleLike = useCallback(
@@ -96,10 +118,11 @@ export function Feed({ me }: { me: Me }) {
 
   const handleAction = useCallback(
     (action: ShortcutAction) => {
-      const post = posts[focusedIndex];
+      const post = visiblePosts[focusedIndex];
       switch (action) {
         case "next":
-          if (focusedIndex < posts.length - 1) focusPost(focusedIndex + 1);
+          if (focusedIndex < visiblePosts.length - 1)
+            focusPost(focusedIndex + 1);
           break;
         case "prev":
           if (focusedIndex > 0) focusPost(focusedIndex - 1);
@@ -129,7 +152,7 @@ export function Feed({ me }: { me: Me }) {
       }
     },
     [
-      posts,
+      visiblePosts,
       focusedIndex,
       focusPost,
       reroll,
@@ -164,9 +187,16 @@ export function Feed({ me }: { me: Me }) {
       <header className="feed-header">
         <h1>endless endless summer</h1>
         <span className="feed-user">{me.userName}</span>
+        <button
+          type="button"
+          aria-label="settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
       </header>
       <main className="feed-posts">
-        {posts.map((post, index) => (
+        {visiblePosts.map((post, index) => (
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: 重複ポスト許容のため index を含める
             key={`${post.id}:${index}`}
@@ -197,6 +227,13 @@ export function Feed({ me }: { me: Me }) {
         />
       ) : null}
       <Toast message={toast} />
+      {settingsOpen ? (
+        <SettingsPanel
+          settings={settings}
+          onChange={updateSettings}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

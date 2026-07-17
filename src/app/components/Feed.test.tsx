@@ -1,10 +1,10 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FeedPost, Me } from "../../shared/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FeedPost, Me, PostKind } from "../../shared/types";
 import { Feed } from "./Feed";
 
-const post = (id: string): FeedPost => ({
+const post = (id: string, kind: PostKind = "text"): FeedPost => ({
   id,
   blogName: `blog-${id}`,
   postUrl: `https://blog.tumblr.com/post/${id}`,
@@ -12,7 +12,7 @@ const post = (id: string): FeedPost => ({
   tags: [],
   reblogKey: "rk",
   liked: false,
-  kind: "text",
+  kind,
   content: [{ type: "text", text: `post ${id}` }],
   trail: [],
 });
@@ -206,5 +206,53 @@ describe("Feed reblog dialog", () => {
     await userEvent.keyboard("j");
     const articles = screen.getAllByRole("article");
     expect(articles[1]).toHaveClass("focused");
+  });
+});
+
+describe("Feed settings", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("歯車ボタンで SettingsPanel が開き kind のチェックを外すとそのタイプのポストが消える", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ posts: [post("1", "text"), post("2", "image")] }),
+      ),
+    );
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await screen.findByText("post 2");
+
+    await userEvent.click(screen.getByRole("button", { name: "settings" }));
+    const imageCheckbox = screen.getByRole("checkbox", { name: "image" });
+    await userEvent.click(imageCheckbox);
+
+    expect(screen.queryByText("post 2")).not.toBeInTheDocument();
+    expect(screen.getByText("post 1")).toBeInTheDocument();
+  });
+
+  it("設定変更で focusedIndex が 0 にリセットされる", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          posts: [post("1"), post("2"), post("3")],
+        }),
+      ),
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.keyboard("jj");
+    expect(screen.getAllByRole("article")[2]).toHaveClass("focused");
+
+    await userEvent.click(screen.getByRole("button", { name: "settings" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "video" }));
+
+    const articles = screen.getAllByRole("article");
+    expect(articles[0]).toHaveClass("focused");
+    expect(articles[2]).not.toHaveClass("focused");
   });
 });
