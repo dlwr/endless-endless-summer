@@ -6,12 +6,14 @@ import { useShortcuts } from "../hooks/useShortcuts";
 import type { ShortcutAction } from "../shortcuts";
 import { HelpOverlay } from "./HelpOverlay";
 import { PostCard } from "./PostCard";
+import { ReblogDialog } from "./ReblogDialog";
 import { Toast } from "./Toast";
 
 export function Feed({ me }: { me: Me }) {
   const { posts, loading, loadMore, reroll } = useFeed();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [dialogIndex, setDialogIndex] = useState<number | null>(null);
   const [postOverrides, setPostOverrides] = useState<
     Record<number, Partial<FeedPost>>
   >({});
@@ -119,15 +121,43 @@ export function Feed({ me }: { me: Me }) {
         case "reblog":
           instantReblog(focusedIndex);
           break;
+        case "reblogDialog":
+          if (viewPost(focusedIndex)) setDialogIndex(focusedIndex);
+          break;
         default:
-          // reblogDialog は Task 12 で結線
           break;
       }
     },
-    [posts, focusedIndex, focusPost, reroll, toggleLike, instantReblog],
+    [
+      posts,
+      focusedIndex,
+      focusPost,
+      reroll,
+      toggleLike,
+      instantReblog,
+      viewPost,
+    ],
   );
 
-  useShortcuts(handleAction, !helpOpen || true);
+  useShortcuts(handleAction, dialogIndex === null);
+
+  const submitDialogReblog = useCallback(
+    (input: { blogName: string; comment: string; tags: string }) => {
+      const post = dialogIndex !== null ? viewPost(dialogIndex) : undefined;
+      if (!post) return;
+      setDialogIndex(null);
+      reblogPost({
+        id: post.id,
+        reblogKey: post.reblogKey,
+        blogName: input.blogName,
+        comment: input.comment || undefined,
+        tags: input.tags || undefined,
+      })
+        .then(() => showToast(`Reblogged to ${input.blogName}`))
+        .catch(() => showToast("Reblog failed"));
+    },
+    [dialogIndex, viewPost, showToast],
+  );
 
   return (
     <div data-testid="feed" className="feed">
@@ -149,7 +179,7 @@ export function Feed({ me }: { me: Me }) {
               focused={index === focusedIndex}
               onLike={() => toggleLike(index)}
               onReblog={() => instantReblog(index)}
-              onReblogDialog={() => {}}
+              onReblogDialog={() => setDialogIndex(index)}
             />
           </div>
         ))}
@@ -158,6 +188,14 @@ export function Feed({ me }: { me: Me }) {
         </div>
       </main>
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+      {dialogIndex !== null && viewPost(dialogIndex) ? (
+        <ReblogDialog
+          post={viewPost(dialogIndex) as FeedPost}
+          blogs={me.blogs}
+          onSubmit={submitDialogReblog}
+          onClose={() => setDialogIndex(null)}
+        />
+      ) : null}
       <Toast message={toast} />
     </div>
   );
