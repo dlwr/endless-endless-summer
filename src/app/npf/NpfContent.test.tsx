@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { NpfContent } from "./NpfContent";
 
@@ -76,5 +76,31 @@ describe("NpfContent", () => {
       "src",
       "https://v/mp4",
     );
+  });
+
+  it("link ブロックの url が javascript: の場合はアンカーを描画しない", () => {
+    const { container } = render(
+      <NpfContent
+        blocks={[
+          { type: "link", url: "javascript:alert(1)", title: "危険なリンク" },
+        ]}
+      />,
+    );
+    expect(within(container).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(container).getByText("危険なリンク")).toBeInTheDocument();
+  });
+
+  it("video ブロックの embed_iframe url が javascript: の場合は iframe を描画しない", () => {
+    const { container } = render(
+      <NpfContent
+        blocks={[
+          {
+            type: "video",
+            embed_iframe: { url: "javascript:alert(1)" },
+          },
+        ]}
+      />,
+    );
+    expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 });

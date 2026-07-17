@@ -7,6 +7,7 @@ import type {
   NpfVideoBlock,
 } from "../../shared/types";
 import { applyFormatting } from "./format";
+import { safeUrl } from "./safe-url";
 
 export function NpfContent({ blocks }: { blocks: NpfBlock[] }) {
   return (
@@ -44,9 +45,10 @@ function Segments({ block }: { block: NpfTextBlock }) {
         let node = <>{seg.text}</>;
         if (seg.bold) node = <strong>{node}</strong>;
         if (seg.italic) node = <em>{node}</em>;
-        if (seg.href) {
+        const href = safeUrl(seg.href);
+        if (href) {
           node = (
-            <a href={seg.href} target="_blank" rel="noopener noreferrer">
+            <a href={href} target="_blank" rel="noopener noreferrer">
               {node}
             </a>
           );
@@ -115,41 +117,52 @@ function ImageBlock({ block }: { block: NpfImageBlock }) {
     (a, b) => (b.width ?? 0) - (a.width ?? 0),
   )[0];
   if (!best) return null;
-  return <img src={best.url} alt={block.alt_text ?? ""} loading="lazy" />;
+  const src = safeUrl(best.url);
+  if (!src) return null;
+  return <img src={src} alt={block.alt_text ?? ""} loading="lazy" />;
 }
 
 function LinkBlock({ block }: { block: NpfLinkBlock }) {
+  const href = safeUrl(block.url);
   return (
     <div className="npf-link">
-      <a href={block.url} target="_blank" rel="noopener noreferrer">
-        {block.title ?? block.url}
-      </a>
+      {href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {block.title ?? block.url}
+        </a>
+      ) : (
+        <span>{block.title ?? block.url}</span>
+      )}
       {block.description ? <p>{block.description}</p> : null}
     </div>
   );
 }
 
 function VideoBlock({ block }: { block: NpfVideoBlock }) {
-  if (block.media?.url) {
+  const mediaUrl = safeUrl(block.media?.url);
+  if (mediaUrl) {
+    const poster = safeUrl(block.poster?.[0]?.url) ?? undefined;
     return (
       // biome-ignore lint/a11y/useMediaCaption: Tumblrのメディアに字幕トラックは無い
-      <video controls src={block.media.url} poster={block.poster?.[0]?.url} />
+      <video controls src={mediaUrl} poster={poster} />
     );
   }
-  if (block.embed_iframe?.url) {
+  const iframeUrl = safeUrl(block.embed_iframe?.url);
+  if (iframeUrl) {
     return (
       <iframe
-        src={block.embed_iframe.url}
+        src={iframeUrl}
         title="embedded video"
-        width={block.embed_iframe.width}
-        height={block.embed_iframe.height}
+        width={block.embed_iframe?.width}
+        height={block.embed_iframe?.height}
         allowFullScreen
       />
     );
   }
-  if (block.url) {
+  const linkUrl = safeUrl(block.url);
+  if (linkUrl) {
     return (
-      <a href={block.url} target="_blank" rel="noopener noreferrer">
+      <a href={linkUrl} target="_blank" rel="noopener noreferrer">
         {block.url}
       </a>
     );
@@ -159,18 +172,20 @@ function VideoBlock({ block }: { block: NpfVideoBlock }) {
 
 function AudioBlock({ block }: { block: NpfAudioBlock }) {
   const label = [block.artist, block.title].filter(Boolean).join(" — ");
-  if (block.media?.url) {
+  const mediaUrl = safeUrl(block.media?.url);
+  if (mediaUrl) {
     return (
       <figure className="npf-audio">
         {label ? <figcaption>{label}</figcaption> : null}
         {/* biome-ignore lint/a11y/useMediaCaption: Tumblrのメディアに字幕トラックは無い */}
-        <audio controls src={block.media.url} />
+        <audio controls src={mediaUrl} />
       </figure>
     );
   }
-  if (block.url) {
+  const linkUrl = safeUrl(block.url);
+  if (linkUrl) {
     return (
-      <a href={block.url} target="_blank" rel="noopener noreferrer">
+      <a href={linkUrl} target="_blank" rel="noopener noreferrer">
         {label || block.url}
       </a>
     );
