@@ -42,6 +42,7 @@ export function Feed({ me }: { me: Me }) {
     // (Task 11 の reroll 修正と同じクラスのバグを防ぐ)
     setFocusedIndex(0);
     setPostOverrides({});
+    setDialogIndex(null);
   }, []);
 
   useEffect(() => {

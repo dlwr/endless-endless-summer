@@ -255,4 +255,26 @@ describe("Feed settings", () => {
     expect(articles[0]).toHaveClass("focused");
     expect(articles[2]).not.toHaveClass("focused");
   });
+
+  it("フィルタ変更中はリブログダイアログが閉じる", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          posts: [post("1", "text"), post("2", "image")],
+        }),
+      ),
+    );
+    render(<Feed me={meWithBlog} />);
+    await screen.findByText("post 1");
+    await screen.findByText("post 2");
+
+    await userEvent.keyboard("T");
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "settings" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "image" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
