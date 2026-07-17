@@ -94,4 +94,42 @@ describe("Feed actions", () => {
       expect(screen.getByText("Reblogged to mainblog")).toBeInTheDocument();
     });
   });
+
+  it("r でリロールすると楽観更新の残留が消える", async () => {
+    let feedCallCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed")) {
+        feedCallCount++;
+        if (feedCallCount === 1) {
+          return Response.json({ posts: [post("1")] });
+        }
+        return Response.json({ posts: [post("2")] });
+      }
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<Feed me={me} />);
+
+    // Wait for post 1 to load
+    await screen.findByText("post 1");
+
+    // Like the post (button shows ♥)
+    await userEvent.keyboard("l");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "like" })).toHaveTextContent(
+        "♥",
+      );
+    });
+
+    // Reroll
+    await userEvent.keyboard("r");
+
+    // Wait for post 2 to appear
+    await screen.findByText("post 2");
+
+    // Check that the like button shows ♡ (not ♥)
+    expect(screen.getByRole("button", { name: "like" })).toHaveTextContent("♡");
+  });
 });

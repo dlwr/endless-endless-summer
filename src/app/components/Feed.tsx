@@ -107,6 +107,7 @@ export function Feed({ me }: { me: Me }) {
           break;
         case "reroll":
           setFocusedIndex(0);
+          setPostOverrides({});
           reroll();
           break;
         case "help":
