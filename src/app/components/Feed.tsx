@@ -115,6 +115,7 @@ export function Feed({ me }: { me: Me }) {
     [viewPost, me.blogs, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: posts.length は effect 本体では未参照だが、observer 再生成のトリガーとして意図的に依存配列に含めている(効果内のコメント参照)
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -124,10 +125,12 @@ export function Feed({ me }: { me: Me }) {
       emptyRoundsRef.current = 0;
     }
     prevVisibleLengthRef.current = visiblePosts.length;
-    // visiblePosts.length を deps に含めることで、バッチが 0 件の visible
-    // ポストしか追加しなかった場合でも observer を作り直し、交差通知を
-    // 再度発火させる(そうしないと sentinel の交差比率が変化せず二度と
-    // loadMore が呼ばれなくなる)。
+    // posts.length も deps に含めることで、バッチが 0 件の visible ポストしか
+    // 追加しなかった場合(フィルタに一致するポストが無いバッチ)でも observer を
+    // 作り直し、交差通知を再度発火させる。visiblePosts.length だけを見ていると、
+    // 生の posts が増えても visible が 0 のままなら deps が変化せず observer が
+    // 作り直されない → sentinel の交差比率も変化しないので二度と loadMore が
+    // 呼ばれず feed が停止してしまう。
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       if (emptyRoundsRef.current >= MAX_CONSECUTIVE_EMPTY_ROUNDS) return;
@@ -136,7 +139,7 @@ export function Feed({ me }: { me: Me }) {
     });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [loadMore, visiblePosts.length]);
+  }, [loadMore, posts.length, visiblePosts.length]);
 
   const focusPost = useCallback((index: number) => {
     setFocusedIndex(index);

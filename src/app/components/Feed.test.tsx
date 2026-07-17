@@ -417,4 +417,67 @@ describe("Feed 無限スクロールの空フィルタ", () => {
     ).length;
     expect(feedCalls).toBeLessThanOrEqual(4);
   });
+
+  it("visible が増えないバッチが続いても sentinel の再生成だけで loadMore が再発火し、上限で止まる(callback を手動駆動しない)", async () => {
+    localStorage.setItem(
+      "ees:settings",
+      JSON.stringify({
+        kinds: {
+          text: false,
+          image: false,
+          link: false,
+          audio: false,
+          video: true,
+        },
+      }),
+    );
+    let feedCallCount = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      feedCallCount++;
+      return Response.json({
+        posts: [
+          post(`t${feedCallCount}-1`, "text"),
+          post(`t${feedCallCount}-2`, "text"),
+        ],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // 実ブラウザの IntersectionObserver は observe() のたびに、現在の交差状態で
+    // 一度だけ初期通知を発火する(閾値をまたがない限りそれ以降は発火しない)。
+    // このスタブはそれを再現する。テスト側からコールバックを繰り返し手動で駆動する
+    // ことはせず、observer の再生成そのものが再発火のトリガーになることを検証する。
+    class AutoFireIntersectionObserver {
+      callback: (entries: { isIntersecting: boolean }[]) => void;
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        this.callback = cb;
+      }
+      observe() {
+        queueMicrotask(() => this.callback([{ isIntersecting: true }]));
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", AutoFireIntersectionObserver);
+
+    render(<Feed me={me} />);
+
+    // observer callback を手動で駆動する代わりに、非同期チェーン
+    // (fetch → setPosts → effect 再実行 → observer 再生成 → 初期通知)が
+    // 安定するまでマイクロタスク/タイマーを流し込んで待つ。
+    for (let i = 0; i < 20; i++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    // sentinel の再作成による再発火が効いていれば fetch は複数回呼ばれる
+    // (壊れているコードでは visiblePosts.length が変化せず 1 回で止まる)。
+    expect(feedCallCount).toBeGreaterThan(1);
+    // ただし空振り上限(MAX_CONSECUTIVE_EMPTY_ROUNDS=3)があるので無限ループはしない。
+    expect(feedCallCount).toBeLessThanOrEqual(5);
+  });
 });
