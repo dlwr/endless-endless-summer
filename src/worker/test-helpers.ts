@@ -25,7 +25,8 @@ type RouteHandler =
   | (Response | object | Promise<Response | object>);
 
 export function fakeFetch(routes: Record<string, RouteHandler>) {
-  const calls: Request[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: type mismatch between workers-types and DOM Request
+  const calls: Request<any, any>[] = [];
   const fn = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init);
     calls.push(req.clone());

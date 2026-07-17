@@ -136,6 +136,22 @@ describe("TumblrClient", () => {
     expect(new URL(fetchFn.calls[0].url).pathname).toBe("/v2/user/like");
   });
 
+  it("like は id と reblog_key を form で POST する", async () => {
+    const fetchFn = fakeFetch({ "/v2/user/like": { response: {} } });
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    await client.like("123", "abc");
+    const body = new URLSearchParams(await fetchFn.calls[0].text());
+    expect(body.get("id")).toBe("123");
+    expect(body.get("reblog_key")).toBe("abc");
+  });
+
+  it("unlike は /v2/user/unlike に POST する", async () => {
+    const fetchFn = fakeFetch({ "/v2/user/unlike": { response: {} } });
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    await client.unlike("1", "rk");
+    expect(new URL(fetchFn.calls[0].url).pathname).toBe("/v2/user/unlike");
+  });
+
   it("API がエラーを返したら例外を投げる", async () => {
     const fetchFn = fakeFetch({
       "/v2/user/info": () => new Response("nope", { status: 401 }),
