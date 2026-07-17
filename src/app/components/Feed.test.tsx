@@ -51,3 +51,47 @@ describe("Feed keyboard", () => {
     });
   });
 });
+
+describe("Feed actions", () => {
+  it("l で /api/like が呼ばれ liked が楽観更新される", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed"))
+        return Response.json({ posts: [post("1")] });
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.keyboard("l");
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([u]) => String(u).includes("/api/like")),
+      ).toBe(true);
+    });
+    expect(screen.getByRole("button", { name: "like" })).toHaveTextContent("♥");
+  });
+
+  it("t で /api/reblog が呼ばれトーストが出る", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed"))
+        return Response.json({ posts: [post("1")] });
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <Feed
+        me={{
+          userName: "u",
+          blogs: [{ name: "mainblog", title: "M", primary: true, uuid: "x" }],
+        }}
+      />,
+    );
+    await screen.findByText("post 1");
+    await userEvent.keyboard("t");
+    await waitFor(() => {
+      expect(screen.getByText("Reblogged to mainblog")).toBeInTheDocument();
+    });
+  });
+});

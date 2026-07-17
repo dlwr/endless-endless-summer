@@ -1,21 +1,78 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Me } from "../../shared/types";
+import type { FeedPost, Me } from "../../shared/types";
+import { likePost, reblogPost } from "../api";
 import { useFeed } from "../hooks/useFeed";
 import { useShortcuts } from "../hooks/useShortcuts";
 import type { ShortcutAction } from "../shortcuts";
 import { HelpOverlay } from "./HelpOverlay";
 import { PostCard } from "./PostCard";
+import { Toast } from "./Toast";
 
 export function Feed({ me }: { me: Me }) {
   const { posts, loading, loadMore, reroll } = useFeed();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [postOverrides, setPostOverrides] = useState<
+    Record<number, Partial<FeedPost>>
+  >({});
+  const [toast, setToast] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     loadMore();
   }, [loadMore]);
+
+  useEffect(() => {
+    return () => clearTimeout(toastTimer.current);
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  const viewPost = useCallback(
+    (index: number): FeedPost | undefined =>
+      posts[index] ? { ...posts[index], ...postOverrides[index] } : undefined,
+    [posts, postOverrides],
+  );
+
+  const toggleLike = useCallback(
+    (index: number) => {
+      const post = viewPost(index);
+      if (!post) return;
+      const nextLiked = !post.liked;
+      setPostOverrides((prev) => ({
+        ...prev,
+        [index]: { ...prev[index], liked: nextLiked },
+      }));
+      likePost(post.id, post.reblogKey, nextLiked).catch(() => {
+        setPostOverrides((prev) => ({
+          ...prev,
+          [index]: { ...prev[index], liked: !nextLiked },
+        }));
+        showToast("Like failed");
+      });
+    },
+    [viewPost, showToast],
+  );
+
+  const instantReblog = useCallback(
+    (index: number) => {
+      const post = viewPost(index);
+      if (!post) return;
+      const primary = me.blogs.find((b) => b.primary)?.name ?? "";
+      reblogPost({ id: post.id, reblogKey: post.reblogKey })
+        .then(() => showToast(`Reblogged to ${primary}`))
+        .catch(() => showToast("Reblog failed"));
+    },
+    [viewPost, me.blogs, showToast],
+  );
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -55,12 +112,18 @@ export function Feed({ me }: { me: Me }) {
         case "help":
           setHelpOpen((open) => !open);
           break;
+        case "like":
+          toggleLike(focusedIndex);
+          break;
+        case "reblog":
+          instantReblog(focusedIndex);
+          break;
         default:
-          // like / reblog / reblogDialog は Task 11-12 で結線
+          // reblogDialog は Task 12 で結線
           break;
       }
     },
-    [posts, focusedIndex, focusPost, reroll],
+    [posts, focusedIndex, focusPost, reroll, toggleLike, instantReblog],
   );
 
   useShortcuts(handleAction, !helpOpen || true);
@@ -81,10 +144,10 @@ export function Feed({ me }: { me: Me }) {
             }}
           >
             <PostCard
-              post={post}
+              post={viewPost(index) ?? post}
               focused={index === focusedIndex}
-              onLike={() => {}}
-              onReblog={() => {}}
+              onLike={() => toggleLike(index)}
+              onReblog={() => instantReblog(index)}
               onReblogDialog={() => {}}
             />
           </div>
@@ -94,6 +157,7 @@ export function Feed({ me }: { me: Me }) {
         </div>
       </main>
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+      <Toast message={toast} />
     </div>
   );
 }
