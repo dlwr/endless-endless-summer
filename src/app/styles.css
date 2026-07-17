@@ -17,7 +17,7 @@
   --accent-ink: #0077b3;
   --accent-ring: color-mix(in srgb, var(--accent) 30%, transparent);
   --accent-glow: color-mix(in srgb, var(--accent) 55%, transparent);
-  --like: #ff5c77;
+  --like: #e6536b;
   --horizon: #ff9d6c;
   --line: color-mix(in srgb, var(--text) 12%, transparent);
   --card-line: color-mix(in srgb, var(--card-text) 10%, transparent);
@@ -64,6 +64,13 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/* every other focusable lives on the dark chrome (raw --accent is ~9:1+
+   there); the only white surface is the post card, where raw --accent
+   fails the 3:1 non-text minimum, so its focusables get the ink variant */
+.post-card :focus-visible {
+  outline-color: var(--accent-ink);
 }
 
 /* ログイン画面 */
@@ -196,7 +203,11 @@ body {
 }
 
 .post-card.focused {
-  border-color: var(--accent);
+  /* border sits on the card's white face, so it needs the ink variant
+     (raw --accent is only ~2.26:1 there, below the 3:1 UI-component
+     minimum); the ring blooms outward onto the dark page background,
+     where raw --accent stays high-contrast, so it keeps the brighter hue */
+  border-color: var(--accent-ink);
   box-shadow:
     0 0 0 4px var(--accent-ring),
     var(--shadow);
@@ -209,7 +220,7 @@ body {
    fallback and is never clipped by the card's own overflow:hidden. */
 .post-card.focused .post-header::before {
   content: "▍";
-  color: var(--accent);
+  color: var(--accent-ink);
   margin-right: 0.5rem;
   animation: caret-blink 1s steps(1, jump-none) infinite;
 }
