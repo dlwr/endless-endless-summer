@@ -155,6 +155,7 @@ function VideoBlock({ block }: { block: NpfVideoBlock }) {
         title="embedded video"
         width={block.embed_iframe?.width}
         height={block.embed_iframe?.height}
+        sandbox="allow-scripts allow-same-origin allow-presentation"
         allowFullScreen
       />
     );

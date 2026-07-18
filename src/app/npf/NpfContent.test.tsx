@@ -103,4 +103,21 @@ describe("NpfContent", () => {
     );
     expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
+
+  it("video ブロックの embed_iframe は sandbox 属性を持つ", () => {
+    const { container } = render(
+      <NpfContent
+        blocks={[
+          {
+            type: "video",
+            embed_iframe: { url: "https://example.com/embed" },
+          },
+        ]}
+      />,
+    );
+    expect(container.querySelector("iframe")).toHaveAttribute(
+      "sandbox",
+      "allow-scripts allow-same-origin allow-presentation",
+    );
+  });
 });
