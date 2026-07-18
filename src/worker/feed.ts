@@ -2,7 +2,9 @@ import type { FeedPost, NpfBlock, PostKind, TrailItem } from "../shared/types";
 import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "./sampling";
 import type { RawPost, TumblrClient } from "./tumblr";
 
-export const SAMPLES_PER_BATCH = 6;
+// Tumblr consumer key の呼び出し予算(1,000/時・5,000/日、全ユーザー共有)を
+// 節約するため、1 バッチあたりのサンプル数を控えめにしている。
+export const SAMPLES_PER_BATCH = 4;
 export const POSTS_PER_SAMPLE = 2;
 export const FOLLOWING_TTL = 3600;
 
