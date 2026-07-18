@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "deploy": "vite build && wrangler deploy --config dist/endless_endless_summer/wrangler.json"
   },
   "keywords": [],
   "author": "",
