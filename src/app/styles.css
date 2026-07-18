@@ -172,6 +172,22 @@ body {
   transform: rotate(20deg);
 }
 
+.feed-header button[aria-label="logout"] {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: color 0.15s var(--ease);
+}
+
+.feed-header button[aria-label="logout"]:hover {
+  color: var(--text);
+}
+
 .feed-posts {
   max-width: var(--column);
   margin: 0 auto;
@@ -750,6 +766,8 @@ kbd {
   .login-button:hover,
   .feed-header button[aria-label="settings"],
   .feed-header button[aria-label="settings"]:hover,
+  .feed-header button[aria-label="logout"],
+  .feed-header button[aria-label="logout"]:hover,
   .post-card,
   .post-actions button,
   .post-actions button:active,

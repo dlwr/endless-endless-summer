@@ -209,6 +209,31 @@ describe("Feed reblog dialog", () => {
   });
 });
 
+describe("Feed logout", () => {
+  it("Logout ボタンで /auth/logout に POST される", async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/feed"))
+          return Response.json({ posts: [post("1")] });
+        return Response.json({ ok: true });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    await userEvent.click(screen.getByRole("button", { name: "logout" }));
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([u, init]) =>
+            String(u).includes("/auth/logout") && init?.method === "POST",
+        ),
+      ).toBe(true);
+    });
+  });
+});
+
 describe("Feed settings", () => {
   beforeEach(() => {
     localStorage.clear();

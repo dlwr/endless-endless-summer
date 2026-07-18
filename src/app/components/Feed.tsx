@@ -200,6 +200,14 @@ export function Feed({ me }: { me: Me }) {
 
   useShortcuts(handleAction, dialogIndex === null && !settingsOpen);
 
+  const logout = useCallback(() => {
+    fetch("/auth/logout", { method: "POST" })
+      .then(() => {
+        location.href = "/";
+      })
+      .catch(() => showToast("Logout failed"));
+  }, [showToast]);
+
   const submitDialogReblog = useCallback(
     (input: { blogName: string; comment: string; tags: string }) => {
       const post = dialogIndex !== null ? viewPost(dialogIndex) : undefined;
@@ -229,6 +237,9 @@ export function Feed({ me }: { me: Me }) {
           onClick={() => setSettingsOpen(true)}
         >
           ⚙
+        </button>
+        <button type="button" aria-label="logout" onClick={logout}>
+          Logout
         </button>
       </header>
       <main className="feed-posts">
