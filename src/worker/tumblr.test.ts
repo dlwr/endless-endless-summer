@@ -5,6 +5,7 @@ import {
   refreshTokens,
   type Tokens,
   TumblrClient,
+  TumblrRateLimitError,
 } from "./tumblr";
 
 const creds = { clientId: "cid", clientSecret: "sec" };
@@ -158,6 +159,63 @@ describe("TumblrClient", () => {
     });
     const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
     await expect(client.userInfo()).rejects.toThrow("401");
+  });
+
+  it("429 を受けたら TumblrRateLimitError を投げる", async () => {
+    const fetchFn = fakeFetch({
+      "/v2/user/info": () => new Response("rate limited", { status: 429 }),
+    });
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    await expect(client.userInfo()).rejects.toBeInstanceOf(
+      TumblrRateLimitError,
+    );
+  });
+
+  it("TumblrRateLimitError は status 429 を持つ", async () => {
+    const fetchFn = fakeFetch({
+      "/v2/user/info": () => new Response("rate limited", { status: 429 }),
+    });
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    const error = await client.userInfo().catch((err) => err);
+    expect((error as TumblrRateLimitError).status).toBe(429);
+  });
+
+  it("成功レスポンスでも onResponse が呼ばれる", async () => {
+    const fetchFn = fakeFetch({
+      "/v2/user/info": { response: { user: { name: "u", blogs: [] } } },
+    });
+    const responses: Response[] = [];
+    const client = new TumblrClient(
+      liveTokens,
+      creds,
+      async () => {},
+      fetchFn,
+      undefined,
+      async (res) => {
+        responses.push(res);
+      },
+    );
+    await client.userInfo();
+    expect(responses).toHaveLength(1);
+  });
+
+  it("失敗レスポンスでも onResponse が呼ばれる", async () => {
+    const fetchFn = fakeFetch({
+      "/v2/user/info": () => new Response("nope", { status: 401 }),
+    });
+    const responses: Response[] = [];
+    const client = new TumblrClient(
+      liveTokens,
+      creds,
+      async () => {},
+      fetchFn,
+      undefined,
+      async (res) => {
+        responses.push(res);
+      },
+    );
+    await expect(client.userInfo()).rejects.toThrow();
+    expect(responses).toHaveLength(1);
   });
 
   // Workers ランタイムの fetch は this がグローバル以外だと Illegal invocation を投げる

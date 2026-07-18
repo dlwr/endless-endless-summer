@@ -1,6 +1,10 @@
 import type { FeedPost, NpfBlock, PostKind, TrailItem } from "../shared/types";
 import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "./sampling";
-import type { RawPost, TumblrClient } from "./tumblr";
+import {
+  type RawPost,
+  type TumblrClient,
+  TumblrRateLimitError,
+} from "./tumblr";
 
 // Tumblr consumer key の呼び出し予算(1,000/時・5,000/日、全ユーザー共有)を
 // 節約するため、1 バッチあたりのサンプル数を控えめにしている。
@@ -92,8 +96,11 @@ export async function buildFeed(
           return { ok: true, posts: [] as FeedPost[] };
         }
         return { ok: true, posts: posts.map(normalizePost) };
-      } catch {
-        // 死んだ/非公開ブログや 429 などで単一サンプルが失敗しても feed 全体は失敗させない
+      } catch (err) {
+        // TumblrRateLimitError は consumer key 全体の予算を使い切ったサインなので、
+        // 握りつぶさず buildFeed の呼び出し元まで伝播させて RateLimitGuard を
+        // trip させる(死んだ/非公開ブログなど他の失敗は単一サンプルの失敗として無視する)。
+        if (err instanceof TumblrRateLimitError) throw err;
         return { ok: false, posts: [] as FeedPost[] };
       }
     }),

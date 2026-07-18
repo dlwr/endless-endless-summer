@@ -11,6 +11,17 @@ export type UserInfo = {
 };
 export type RawPost = Record<string, unknown>;
 
+// Tumblr が 429 を返したときに投げる専用エラー。呼び出し側がこれを instanceof で
+// 判別して backoff (RateLimitGuard.trip) に繋げられるよう status を公開する。
+export class TumblrRateLimitError extends Error {
+  readonly status = 429;
+
+  constructor(message = "tumblr rate limited") {
+    super(message);
+    this.name = "TumblrRateLimitError";
+  }
+}
+
 const API = "https://api.tumblr.com/v2";
 
 // Workers の fetch は this がグローバル以外だと Illegal invocation になるためラップする
@@ -82,6 +93,7 @@ export class TumblrClient {
     private onTokens: (tokens: Tokens) => Promise<void>,
     private fetchFn: typeof fetch = globalFetch,
     private nowFn: () => number = () => Math.floor(Date.now() / 1000),
+    private onResponse?: (res: Response) => void | Promise<void>,
   ) {}
 
   private async ensureFresh(): Promise<void> {
@@ -103,6 +115,10 @@ export class TumblrClient {
         Authorization: `Bearer ${this.tokens.accessToken}`,
       },
     });
+    await this.onResponse?.(res);
+    if (res.status === 429) {
+      throw new TumblrRateLimitError();
+    }
     if (!res.ok) {
       throw new Error(`tumblr api error: ${res.status} ${await res.text()}`);
     }

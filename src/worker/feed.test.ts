@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildFeed, deriveKind, normalizePost } from "./feed";
 import { TUMBLR_EPOCH } from "./sampling";
 import { FakeKV } from "./test-helpers";
-import type { RawPost } from "./tumblr";
+import { type RawPost, TumblrRateLimitError } from "./tumblr";
 
 const rawPost = (over: Partial<Record<string, unknown>> = {}): RawPost => ({
   id_string: "123",
@@ -179,6 +179,22 @@ describe("buildFeed", () => {
     expect(ids).not.toContain("b1");
     expect(ids).toContain("a1");
     expect(ids).toContain("c1");
+  });
+
+  it("posts が TumblrRateLimitError を投げたら他のブログの結果を握りつぶさず buildFeed も reject する", async () => {
+    const following = [{ name: "a" }, { name: "limited" }];
+    const client = {
+      following: async () => following,
+      posts: async (blog: string, _before: number, _limit: number) => {
+        if (blog === "limited") throw new TumblrRateLimitError();
+        return [rawPost({ id_string: "a1" })];
+      },
+    };
+    const kv = new FakeKV();
+    const rng = cyclicRng([0, 0.5]);
+    await expect(
+      buildFeed(client, kv as unknown as KVNamespace, "u", rng, now),
+    ).rejects.toBeInstanceOf(TumblrRateLimitError);
   });
 
   it("すべてのブログで posts が例外を投げたら buildFeed は reject する", async () => {
