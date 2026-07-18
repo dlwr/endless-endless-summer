@@ -12,6 +12,9 @@ export type UserInfo = {
 export type RawPost = Record<string, unknown>;
 
 const API = "https://api.tumblr.com/v2";
+
+// Workers の fetch は this がグローバル以外だと Illegal invocation になるためラップする
+const globalFetch: typeof fetch = (input, init) => fetch(input, init);
 const TOKEN_URL = `${API}/oauth2/token`;
 
 type TokenBody = {
@@ -42,7 +45,7 @@ export function exchangeCode(
   creds: Creds,
   code: string,
   redirectUri: string,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: typeof fetch = globalFetch,
 ): Promise<Tokens> {
   return requestTokens(
     {
@@ -59,7 +62,7 @@ export function exchangeCode(
 export function refreshTokens(
   creds: Creds,
   refreshToken: string,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: typeof fetch = globalFetch,
 ): Promise<Tokens> {
   return requestTokens(
     {
@@ -77,7 +80,7 @@ export class TumblrClient {
     private tokens: Tokens,
     private creds: Creds,
     private onTokens: (tokens: Tokens) => Promise<void>,
-    private fetchFn: typeof fetch = fetch,
+    private fetchFn: typeof fetch = globalFetch,
     private nowFn: () => number = () => Math.floor(Date.now() / 1000),
   ) {}
 

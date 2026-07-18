@@ -159,4 +159,25 @@ describe("TumblrClient", () => {
     const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
     await expect(client.userInfo()).rejects.toThrow("401");
   });
+
+  // Workers ランタイムの fetch は this がグローバル以外だと Illegal invocation を投げる
+  it("fetchFn 未指定時もグローバル fetch を this 非依存で呼ぶ", async () => {
+    const original = globalThis.fetch;
+    function strictFetch(this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        return Promise.reject(new TypeError("Illegal invocation"));
+      }
+      return Promise.resolve(
+        Response.json({ response: { user: { name: "u", blogs: [] } } }),
+      );
+    }
+    globalThis.fetch = strictFetch as unknown as typeof fetch;
+    try {
+      const client = new TumblrClient(liveTokens, creds, async () => {});
+      const user = await client.userInfo();
+      expect(user.name).toBe("u");
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
 });

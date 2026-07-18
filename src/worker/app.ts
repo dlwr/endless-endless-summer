@@ -5,7 +5,8 @@ import type { AppEnv } from "./env";
 
 export type AppDeps = { fetchFn: typeof fetch };
 
-const defaultDeps: AppDeps = { fetchFn: fetch };
+// Workers の fetch は this がグローバル以外だと Illegal invocation になるためラップする
+const defaultDeps: AppDeps = { fetchFn: (input, init) => fetch(input, init) };
 
 export function createApp(deps: AppDeps = defaultDeps): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
