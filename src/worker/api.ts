@@ -2,8 +2,13 @@ import type { Context, Hono } from "hono";
 import type { AppDeps } from "./app";
 import type { AppEnv } from "./env";
 import { buildFeed } from "./feed";
+import {
+  DEFAULT_TRIP_SECONDS,
+  RateLimitGuard,
+  readRateHeaders,
+} from "./ratelimit";
 import { requireSession, SessionStore } from "./session";
-import { TumblrClient } from "./tumblr";
+import { TumblrClient, TumblrRateLimitError } from "./tumblr";
 
 export function clientForSession(
   c: Context<AppEnv>,
@@ -12,6 +17,7 @@ export function clientForSession(
   const session = c.get("session");
   const sid = c.get("sid");
   const store = new SessionStore(c.env.KV);
+  const guard = new RateLimitGuard(c.env.KV);
   return new TumblrClient(
     session.tokens,
     {
@@ -22,7 +28,19 @@ export function clientForSession(
       await store.update(sid, { ...session, tokens });
     },
     deps.fetchFn,
+    undefined,
+    async (res) => {
+      // 成功・失敗を問わず、Tumblr が返す x-ratelimit-* ヘッダーを読んで
+      // 共有 backoff 状態を更新する(読み取り専用の /api/feed だけが check() で
+      // ゲートするが、書き込み系のレスポンスからも残量は学習しておく)。
+      const now = Math.floor(Date.now() / 1000);
+      await guard.record(readRateHeaders(res.headers, now), now);
+    },
   );
+}
+
+function rateLimitedJson(c: Context<AppEnv>, retryAt: number): Response {
+  return c.json({ error: "rate_limited", retryAt }, 429);
 }
 
 export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
@@ -32,15 +50,30 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
   });
 
   app.get("/api/feed", requireSession(), async (c) => {
+    const guard = new RateLimitGuard(c.env.KV);
+    const now = Math.floor(Date.now() / 1000);
+    const backoffAt = await guard.check(now);
+    if (backoffAt !== null) return rateLimitedJson(c, backoffAt);
+
     const client = clientForSession(c, deps);
-    const posts = await buildFeed(
-      client,
-      c.env.KV,
-      c.get("session").userName,
-      Math.random,
-      Math.floor(Date.now() / 1000),
-    );
-    return c.json({ posts });
+    try {
+      const posts = await buildFeed(
+        client,
+        c.env.KV,
+        c.get("session").userName,
+        Math.random,
+        now,
+      );
+      return c.json({ posts });
+    } catch (err) {
+      if (err instanceof TumblrRateLimitError) {
+        // ヘッダー無し 429 では record() が backoff を判断できないので、
+        // 固定秒数の backoff を明示的に設定する。
+        await guard.trip(now);
+        return rateLimitedJson(c, now + DEFAULT_TRIP_SECONDS);
+      }
+      throw err;
+    }
   });
 
   app.post("/api/like", requireSession(), async (c) => {
@@ -50,12 +83,22 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
       like: boolean;
     }>();
     const client = clientForSession(c, deps);
-    if (like) {
-      await client.like(id, reblogKey);
-    } else {
-      await client.unlike(id, reblogKey);
+    try {
+      if (like) {
+        await client.like(id, reblogKey);
+      } else {
+        await client.unlike(id, reblogKey);
+      }
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof TumblrRateLimitError) {
+        // 書き込みはユーザー単位の別枠なので、/api/feed の共有 backoff は
+        // trip() しない(guard.check() もしていないので素通しのまま)。
+        const now = Math.floor(Date.now() / 1000);
+        return rateLimitedJson(c, now + DEFAULT_TRIP_SECONDS);
+      }
+      throw err;
     }
-    return c.json({ ok: true });
   });
 
   app.post("/api/reblog", requireSession(), async (c) => {
@@ -70,7 +113,16 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
     const target = blogName ?? session.blogs.find((b) => b.primary)?.name;
     if (!target) return c.json({ error: "no target blog" }, 400);
     const client = clientForSession(c, deps);
-    await client.reblog(target, { id, reblogKey: reblogKey, comment, tags });
-    return c.json({ ok: true });
+    try {
+      await client.reblog(target, { id, reblogKey: reblogKey, comment, tags });
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof TumblrRateLimitError) {
+        // like と同様、書き込みは /api/feed の共有 backoff を trip() しない。
+        const now = Math.floor(Date.now() / 1000);
+        return rateLimitedJson(c, now + DEFAULT_TRIP_SECONDS);
+      }
+      throw err;
+    }
   });
 }

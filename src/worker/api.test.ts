@@ -3,6 +3,31 @@ import { createApp } from "./app";
 import { type Session, SessionStore } from "./session";
 import { FakeKV, fakeFetch } from "./test-helpers";
 
+async function setupSession(
+  tumblrFetch: ReturnType<typeof fakeFetch>,
+  sessionOverride: Session = session,
+) {
+  const kv = new FakeKV();
+  const sid = await new SessionStore(kv as unknown as KVNamespace).create(
+    sessionOverride,
+  );
+  const app = createApp({ fetchFn: tumblrFetch });
+  const env = { KV: kv, TUMBLR_CLIENT_ID: "cid", TUMBLR_CLIENT_SECRET: "sec" };
+  const getFeed = () =>
+    app.request("/api/feed", { headers: { Cookie: `sid=${sid}` } }, env);
+  const postLike = (body: unknown) =>
+    app.request(
+      "/api/like",
+      {
+        method: "POST",
+        headers: { Cookie: `sid=${sid}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
+  return { kv, sid, app, env, getFeed, postLike };
+}
+
 const session: Session = {
   tokens: { accessToken: "at", refreshToken: "rt", expiresAt: 9_999_999_999 },
   userName: "u",
@@ -114,5 +139,102 @@ describe("POST /api/reblog", () => {
       { KV: kv, TUMBLR_CLIENT_ID: "cid", TUMBLR_CLIENT_SECRET: "sec" },
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /api/feed レートリミット", () => {
+  it("backoff 中は Tumblr を呼ばずに 429 と retryAt を返す", async () => {
+    const tumblr = fakeFetch({});
+    const { kv, getFeed } = await setupSession(tumblr);
+    const retryAt = Math.floor(Date.now() / 1000) + 1000;
+    await kv.put("ratelimit:backoff", JSON.stringify(retryAt));
+
+    const res = await getFeed();
+
+    expect(res.status).toBe(429);
+    expect(tumblr.calls.length).toBe(0);
+  });
+
+  it("backoff 中のレスポンスは error と backoff の解除時刻を retryAt として含む", async () => {
+    const tumblr = fakeFetch({});
+    const { kv, getFeed } = await setupSession(tumblr);
+    const retryAt = Math.floor(Date.now() / 1000) + 1000;
+    await kv.put("ratelimit:backoff", JSON.stringify(retryAt));
+
+    const res = await getFeed();
+    const body = (await res.json()) as { error: string; retryAt: number };
+
+    expect(body).toEqual({ error: "rate_limited", retryAt });
+  });
+
+  it("Tumblr が 429 を返したら 429 と retryAt を返す", async () => {
+    const tumblr = fakeFetch({
+      "/v2/user/following": () => new Response("nope", { status: 429 }),
+    });
+    const { getFeed } = await setupSession(tumblr);
+
+    const res = await getFeed();
+    const body = (await res.json()) as { error: string; retryAt: number };
+
+    expect(res.status).toBe(429);
+    expect(body.error).toBe("rate_limited");
+    expect(typeof body.retryAt).toBe("number");
+  });
+
+  it("Tumblr の 429 を受けた後は次の /api/feed リクエストも backoff で弾かれる", async () => {
+    const tumblr = fakeFetch({
+      "/v2/user/following": () => new Response("nope", { status: 429 }),
+    });
+    const { getFeed } = await setupSession(tumblr);
+    await getFeed();
+
+    const secondCallCount = tumblr.calls.length;
+    const res = await getFeed();
+
+    expect(res.status).toBe(429);
+    // backoff で弾かれていれば following への Tumblr 呼び出しは増えない
+    expect(tumblr.calls.length).toBe(secondCallCount);
+  });
+});
+
+describe("POST /api/like レートリミット", () => {
+  it("Tumblr が 429 を返したら 429 と retryAt を返す", async () => {
+    const tumblr = fakeFetch({
+      "/v2/user/like": () => new Response("nope", { status: 429 }),
+    });
+    const { postLike } = await setupSession(tumblr);
+
+    const res = await postLike({ id: "1", reblogKey: "rk", like: true });
+    const body = (await res.json()) as { error: string; retryAt: number };
+
+    expect(res.status).toBe(429);
+    expect(body.error).toBe("rate_limited");
+  });
+
+  it("/api/feed が backoff 中でも guard.check() を経由せず Tumblr へリクエストする", async () => {
+    const tumblr = fakeFetch({ "/v2/user/like": { response: {} } });
+    const { kv, postLike } = await setupSession(tumblr);
+    await kv.put(
+      "ratelimit:backoff",
+      JSON.stringify(Math.floor(Date.now() / 1000) + 1000),
+    );
+
+    const res = await postLike({ id: "1", reblogKey: "rk", like: true });
+
+    expect(res.status).toBe(200);
+    expect(tumblr.calls.length).toBe(1);
+  });
+
+  it("書き込みの 429 は /api/feed の backoff を発生させない(別枠)", async () => {
+    const tumblr = fakeFetch({
+      "/v2/user/like": () => new Response("nope", { status: 429 }),
+      "/v2/user/following": { response: { total_blogs: 0, blogs: [] } },
+    });
+    const { postLike, getFeed } = await setupSession(tumblr);
+    await postLike({ id: "1", reblogKey: "rk", like: true });
+
+    const res = await getFeed();
+
+    expect(res.status).toBe(200);
   });
 });
