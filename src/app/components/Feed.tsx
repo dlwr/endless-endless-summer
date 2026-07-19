@@ -15,8 +15,17 @@ import { Toast } from "./Toast";
 
 const MAX_CONSECUTIVE_EMPTY_ROUNDS = 3;
 
+// backoff の解除時刻(Unix 秒)をローカル時刻の HH:MM で表示する。
+function formatLocalTime(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 export function Feed({ me }: { me: Me }) {
-  const { posts, loading, error, loadMore, reroll } = useFeed();
+  const { posts, loading, error, rateLimitedUntil, loadMore, reroll } =
+    useFeed();
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [dialogIndex, setDialogIndex] = useState<number | null>(null);
@@ -261,7 +270,17 @@ export function Feed({ me }: { me: Me }) {
           </div>
         ))}
         <div ref={sentinelRef} className="feed-sentinel">
-          {error ? (
+          {rateLimitedUntil ? (
+            <div className="feed-rate-limited">
+              <span>
+                Tumblr rate limit — resting until{" "}
+                {formatLocalTime(rateLimitedUntil)}
+              </span>
+              <button type="button" onClick={() => loadMore()}>
+                Retry
+              </button>
+            </div>
+          ) : error ? (
             <div className="feed-error">
               <span>{error}</span>
               <button type="button" onClick={() => loadMore()}>

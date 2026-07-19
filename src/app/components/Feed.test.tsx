@@ -364,6 +364,101 @@ describe("Feed エラー表示", () => {
     expect(screen.getByTestId("feed")).toBeInTheDocument();
   });
 
+  function expectedLocalTime(unixSeconds: number): string {
+    const d = new Date(unixSeconds * 1000);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  it("429(rate_limited)を受けたら休憩メッセージと Retry ボタンが表示される", async () => {
+    const retryAt = Math.floor(Date.now() / 1000) + 600;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "rate_limited", retryAt }, { status: 429 }),
+      ),
+    );
+    render(<Feed me={me} />);
+    expect(
+      await screen.findByText(new RegExp(expectedLocalTime(retryAt))),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("休憩メッセージは通常のエラー表示とは別の文言を出す", async () => {
+    const retryAt = Math.floor(Date.now() / 1000) + 600;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "rate_limited", retryAt }, { status: 429 }),
+      ),
+    );
+    render(<Feed me={me} />);
+    await screen.findByText(new RegExp(expectedLocalTime(retryAt)));
+    expect(screen.queryByText("boom")).not.toBeInTheDocument();
+  });
+
+  it("休憩表示中に Retry ボタンを押すと /api/feed が再度呼ばれる", async () => {
+    const retryAt = Math.floor(Date.now() / 1000) + 600;
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "rate_limited", retryAt }, { status: 429 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Feed me={me} />);
+    await screen.findByRole("button", { name: "Retry" });
+    const callsBefore = fetchMock.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it("休憩表示中の自動ロードは既存の error 時と同じ上限で頭打ちになる(独自にループしない)", async () => {
+    // sentinel の交差通知そのものは実ブラウザでは頻繁に再発火しないが、この
+    // テストは観測系("sentinel が交差した"という通知)を直接何度も駆動して
+    // 安全弁が効くことを確認する。既存の error(500)経路と全く同じ
+    // emptyRoundsRef の上限(MAX_CONSECUTIVE_EMPTY_ROUNDS=3)で頭打ちになる
+    // ことが「既存の error 時と同様」の意味であり、rateLimitedUntil 専用の
+    // 追加ループ抑制ロジックを持たないことを検証する。
+    const retryAt = Math.floor(Date.now() / 1000) + 600;
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "rate_limited", retryAt }, { status: 429 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const observerCallbackRef: {
+      current: ((entries: { isIntersecting: boolean }[]) => void) | null;
+    } = { current: null };
+    class FakeIntersectionObserver {
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        observerCallbackRef.current = cb;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    render(<Feed me={me} />);
+    await screen.findByRole("button", { name: "Retry" });
+
+    for (let i = 0; i < 10; i++) {
+      observerCallbackRef.current?.([{ isIntersecting: true }]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    // 初回ロード + MAX_CONSECUTIVE_EMPTY_ROUNDS(3) 回までしか呼ばれない
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
   it("Retry ボタンで再取得される", async () => {
     let shouldFail = true;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

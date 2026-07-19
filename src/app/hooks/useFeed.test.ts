@@ -148,3 +148,51 @@ describe("useFeed エラーハンドリング", () => {
     expect(result.current.error).toBeTruthy();
   });
 });
+
+function stubRateLimited(retryAt: number) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({ error: "rate_limited", retryAt }, { status: 429 }),
+    ),
+  );
+}
+
+describe("useFeed レートリミット", () => {
+  it("loadMore が 429 を受けたら rateLimitedUntil に retryAt がセットされる", async () => {
+    stubRateLimited(1_700_000_000);
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+    expect(result.current.rateLimitedUntil).toBe(1_700_000_000);
+  });
+
+  it("loadMore が 429 を受けても error はセットしない(rateLimitedUntil とは別扱い)", async () => {
+    stubRateLimited(1_700_000_000);
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+    expect(result.current.error).toBeNull();
+  });
+
+  it("rateLimitedUntil セット後に loadMore が成功するとクリアされる", async () => {
+    let shouldRateLimit = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        if (shouldRateLimit) {
+          return Response.json(
+            { error: "rate_limited", retryAt: 1_700_000_000 },
+            { status: 429 },
+          );
+        }
+        return Response.json({ posts: [] });
+      }),
+    );
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+    expect(result.current.rateLimitedUntil).toBe(1_700_000_000);
+
+    shouldRateLimit = false;
+    await act(() => result.current.loadMore());
+    expect(result.current.rateLimitedUntil).toBeNull();
+  });
+});

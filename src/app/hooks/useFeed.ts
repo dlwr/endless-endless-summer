@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { FeedPost } from "../../shared/types";
-import { fetchFeed } from "../api";
+import { fetchFeed, RateLimitedError } from "../api";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -10,6 +10,9 @@ export function useFeed() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // error とは別枠。RateLimitedError(Tumblr 予算の backoff 中)を表す。
+  // 通常のエラーと違い、Feed 側で専用の「休憩中」表示に使う。
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<number | null>(null);
   const inFlight = useRef(false);
   const rerolling = useRef(false);
   const generation = useRef(0);
@@ -24,9 +27,16 @@ export function useFeed() {
       if (generation.current === gen) {
         setPosts((prev) => [...prev, ...batch]);
         setError(null);
+        setRateLimitedUntil(null);
       }
     } catch (err) {
-      if (generation.current === gen) setError(errorMessage(err));
+      if (generation.current === gen) {
+        if (err instanceof RateLimitedError) {
+          setRateLimitedUntil(err.retryAt);
+        } else {
+          setError(errorMessage(err));
+        }
+      }
     } finally {
       inFlight.current = false;
       setLoading(false);
@@ -48,9 +58,16 @@ export function useFeed() {
       if (generation.current === gen) {
         setPosts(batch);
         setError(null);
+        setRateLimitedUntil(null);
       }
     } catch (err) {
-      if (generation.current === gen) setError(errorMessage(err));
+      if (generation.current === gen) {
+        if (err instanceof RateLimitedError) {
+          setRateLimitedUntil(err.retryAt);
+        } else {
+          setError(errorMessage(err));
+        }
+      }
     } finally {
       inFlight.current = false;
       rerolling.current = false;
@@ -58,5 +75,5 @@ export function useFeed() {
     }
   }, []);
 
-  return { posts, loading, error, loadMore, reroll };
+  return { posts, loading, error, rateLimitedUntil, loadMore, reroll };
 }
