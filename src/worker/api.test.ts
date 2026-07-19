@@ -195,6 +195,31 @@ describe("GET /api/feed レートリミット", () => {
     // backoff で弾かれていれば following への Tumblr 呼び出しは増えない
     expect(tumblr.calls.length).toBe(secondCallCount);
   });
+
+  it("200 応答でも残量が枯渇気味の x-ratelimit ヘッダーが付いていれば次の /api/feed は backoff で弾かれる", async () => {
+    // record() 経由の「事前 backoff」(429 を実際に受ける前に予算切れを学習する)を検証する。
+    const tumblr = fakeFetch({
+      "/v2/user/following": () =>
+        Response.json(
+          { response: { total_blogs: 0, blogs: [] } },
+          {
+            headers: {
+              "x-ratelimit-perhour-remaining": "50",
+              "x-ratelimit-perday-remaining": "2000",
+              "x-ratelimit-perhour-reset": "1800",
+              "x-ratelimit-perday-reset": "43200",
+            },
+          },
+        ),
+    });
+    const { getFeed } = await setupSession(tumblr);
+
+    const first = await getFeed();
+    expect(first.status).toBe(200);
+
+    const second = await getFeed();
+    expect(second.status).toBe(429);
+  });
 });
 
 describe("POST /api/like レートリミット", () => {
