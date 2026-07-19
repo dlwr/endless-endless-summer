@@ -4,6 +4,7 @@ import { App } from "./App";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.history.pushState({}, "", "/");
 });
 
 function stubFetch(handler: (url: string) => Response) {
@@ -32,5 +33,20 @@ describe("App", () => {
     );
     render(<App />);
     expect(await screen.findByTestId("feed")).toBeInTheDocument();
+  });
+
+  it("/about では未ログインでも AboutPage を表示する", async () => {
+    stubFetch((url) =>
+      url.includes("/api/me")
+        ? new Response("{}", { status: 401 })
+        : Response.json({ posts: [] }),
+    );
+    window.history.pushState({}, "", "/about");
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", {
+        name: "endless endless summer — Terms & Privacy",
+      }),
+    ).toBeInTheDocument();
   });
 });

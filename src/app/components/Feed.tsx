@@ -250,6 +250,9 @@ export function Feed({ me }: { me: Me }) {
         <button type="button" aria-label="logout" onClick={logout}>
           Logout
         </button>
+        <a href="/about" aria-label="about">
+          about
+        </a>
       </header>
       <main className="feed-posts">
         {visiblePosts.map((post, index) => (

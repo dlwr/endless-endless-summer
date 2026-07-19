@@ -6,6 +6,9 @@ export function LoginScreen() {
       <a className="login-button" href="/auth/login">
         Log in with Tumblr
       </a>
+      <a className="login-footer-link" href="/about">
+        Terms &amp; Privacy
+      </a>
     </main>
   );
 }
