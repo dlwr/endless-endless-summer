@@ -120,4 +120,18 @@ describe("NpfContent", () => {
       "allow-scripts allow-same-origin allow-presentation",
     );
   });
+
+  it("自オリジンを指す embed_iframe は iframe を描画しない", () => {
+    const { container } = render(
+      <NpfContent
+        blocks={[
+          {
+            type: "video",
+            embed_iframe: { url: `${window.location.origin}/api/feed` },
+          },
+        ]}
+      />,
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+  });
 });

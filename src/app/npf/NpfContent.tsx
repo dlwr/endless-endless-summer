@@ -148,7 +148,10 @@ function VideoBlock({ block }: { block: NpfVideoBlock }) {
     );
   }
   const iframeUrl = safeUrl(block.embed_iframe?.url);
-  if (iframeUrl) {
+  // 自オリジンの iframe は allow-same-origin と組み合わさると sandbox を無効化できるため拒否する
+  const isCrossOrigin =
+    iframeUrl !== null && new URL(iframeUrl).origin !== window.location.origin;
+  if (iframeUrl && isCrossOrigin) {
     return (
       <iframe
         src={iframeUrl}
