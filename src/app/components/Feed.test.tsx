@@ -43,6 +43,60 @@ describe("Feed keyboard", () => {
     expect(articles[1]).toHaveClass("focused");
   });
 
+  it("末尾のポストで j を押すと次のバッチが読み込まれる", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ posts: [post("1")] }));
+    vi.stubGlobal("fetch", fetchMock);
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+    const feedCallsBefore = fetchMock.mock.calls.length;
+
+    await userEvent.keyboard("j");
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(feedCallsBefore);
+    });
+  });
+
+  it("末尾で j した後、新バッチ到着で次のポストにフォーカスが進む", async () => {
+    let feedCallCount = 0;
+    const fetchMock = vi.fn(async () => {
+      feedCallCount++;
+      if (feedCallCount === 1) {
+        return Response.json({ posts: [post("1")] });
+      }
+      return Response.json({ posts: [post("2")] });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    Element.prototype.scrollIntoView = vi.fn();
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+
+    await userEvent.keyboard("j");
+    await screen.findByText("post 2");
+
+    const articles = screen.getAllByRole("article");
+    expect(articles[1]).toHaveClass("focused");
+  });
+
+  it("j のスクロールはポスト上端にアラインする", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ posts: [post("1"), post("2")] })),
+    );
+    const scrollIntoViewMock = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoViewMock;
+    render(<Feed me={me} />);
+    await screen.findByText("post 1");
+
+    await userEvent.keyboard("j");
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: "start",
+      behavior: "smooth",
+    });
+  });
+
   it("? でヘルプオーバーレイが開く", async () => {
     vi.stubGlobal(
       "fetch",

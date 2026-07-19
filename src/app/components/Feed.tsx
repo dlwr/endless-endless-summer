@@ -44,6 +44,9 @@ export function Feed({ me }: { me: Me }) {
   // フィルタに一致するポストが無い場合に fetch を無限に繰り返さないための上限に使う。
   const emptyRoundsRef = useRef(0);
   const prevVisibleLengthRef = useRef(0);
+  // 末尾ポストで j を押して loadMore() した後、新バッチ到着で自動的に
+  // 次のポストへフォーカスを進めるためのフラグ。
+  const pendingAdvanceRef = useRef(false);
 
   const visiblePosts = useMemo(
     () => posts.filter((p) => settings.kinds[p.kind]),
@@ -60,6 +63,7 @@ export function Feed({ me }: { me: Me }) {
     setPostOverrides({});
     setDialogIndex(null);
     emptyRoundsRef.current = 0;
+    pendingAdvanceRef.current = false;
   }, []);
 
   useEffect(() => {
@@ -153,18 +157,31 @@ export function Feed({ me }: { me: Me }) {
   const focusPost = useCallback((index: number) => {
     setFocusedIndex(index);
     cardRefs.current[index]?.scrollIntoView({
-      block: "center",
+      block: "start",
       behavior: "smooth",
     });
   }, []);
+
+  // 末尾ポストで j した後、新バッチが visiblePosts に反映されたら自動的に
+  // 次のポストへフォーカスを進める(Bug 1: 最後のポストで j が無反応になる問題への対処)。
+  useEffect(() => {
+    if (pendingAdvanceRef.current && visiblePosts.length > focusedIndex + 1) {
+      pendingAdvanceRef.current = false;
+      focusPost(focusedIndex + 1);
+    }
+  }, [visiblePosts.length, focusedIndex, focusPost]);
 
   const handleAction = useCallback(
     (action: ShortcutAction) => {
       const post = visiblePosts[focusedIndex];
       switch (action) {
         case "next":
-          if (focusedIndex < visiblePosts.length - 1)
+          if (focusedIndex < visiblePosts.length - 1) {
             focusPost(focusedIndex + 1);
+          } else {
+            pendingAdvanceRef.current = true;
+            loadMore();
+          }
           break;
         case "prev":
           if (focusedIndex > 0) focusPost(focusedIndex - 1);
@@ -178,6 +195,7 @@ export function Feed({ me }: { me: Me }) {
           setFocusedIndex(0);
           setPostOverrides({});
           emptyRoundsRef.current = 0;
+          pendingAdvanceRef.current = false;
           reroll();
           break;
         case "help":
@@ -200,6 +218,7 @@ export function Feed({ me }: { me: Me }) {
       visiblePosts,
       focusedIndex,
       focusPost,
+      loadMore,
       reroll,
       toggleLike,
       instantReblog,
@@ -259,6 +278,7 @@ export function Feed({ me }: { me: Me }) {
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: 重複ポスト許容のため index を含める
             key={`${post.id}:${index}`}
+            className="post-slot"
             ref={(el) => {
               cardRefs.current[index] = el;
             }}

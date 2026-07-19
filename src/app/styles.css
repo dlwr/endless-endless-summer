@@ -224,6 +224,13 @@ body {
   gap: 1.25rem;
 }
 
+.post-slot {
+  /* sticky .feed-header の実高さ(padding 0.75rem*2 + h1 line-height 1.5rem +
+     border 1px ≒ 3.06rem)に余裕を持たせ、背の高いポストの上端が
+     ヘッダーの下に隠れないようにする。 */
+  scroll-margin-top: 4rem;
+}
+
 .feed-sentinel {
   text-align: center;
   color: var(--muted);
