@@ -142,6 +142,36 @@ describe("RateLimitGuard.trip", () => {
     await guard.trip(now, 60);
     expect(await guard.check(now)).toBe(now + 60);
   });
+
+  it("trip は既存のより長い backoff を短縮しない", async () => {
+    const kv = new FakeKV();
+    const guard = new RateLimitGuard(kv as unknown as KVNamespace);
+    // record で遠い解除時刻を設定(day reset を数時間先)
+    await guard.record(
+      {
+        hourRemaining: 10,
+        dayRemaining: 10,
+        hourResetAt: now + 1800,
+        dayResetAt: now + 43200, // 12時間後
+      },
+      now,
+    );
+    // その後 trip(now, 300) を呼ぶ
+    await guard.trip(now, 300);
+    // backoff は元の遠い時刻のまま
+    expect(await guard.check(now)).toBe(now + 43200);
+  });
+
+  it("trip は既存のより短い backoff を延長する", async () => {
+    const kv = new FakeKV();
+    const guard = new RateLimitGuard(kv as unknown as KVNamespace);
+    // 近い解除時刻を設定
+    await kv.put("ratelimit:backoff", JSON.stringify(now + 60));
+    // trip(now, 300) を呼ぶ
+    await guard.trip(now, 300);
+    // backoff は trip の新しい時刻で更新される
+    expect(await guard.check(now)).toBe(now + 300);
+  });
 });
 
 describe("RateLimitGuard.record - redundant write optimization", () => {

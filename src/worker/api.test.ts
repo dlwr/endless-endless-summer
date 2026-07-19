@@ -302,4 +302,30 @@ describe("POST /api/like レートリミット", () => {
     expect(backoff).not.toBeNull();
     expect(typeof backoff).toBe("number");
   });
+
+  it("/api/like で day ヘッダー付き 429 を受けても長い backoff が維持される", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const tumblr = fakeFetch({
+      "/v2/user/like": () =>
+        new Response("nope", {
+          status: 429,
+          headers: {
+            "x-ratelimit-perhour-remaining": "10",
+            "x-ratelimit-perday-remaining": "10",
+            "x-ratelimit-perhour-reset": "1800",
+            "x-ratelimit-perday-reset": "43200", // 12時間後
+          },
+        }),
+    });
+    const { kv, postLike } = await setupSession(tumblr);
+    const res = await postLike({ id: "1", reblogKey: "rk", like: true });
+
+    expect(res.status).toBe(429);
+    // record が record() 経由で day reset 時刻まで backoff を設定し、
+    // その後 trip() が now+300 で上書きしないはず
+    const backoff = (await kv.get("ratelimit:backoff", "json")) as number;
+    expect(backoff).toBeGreaterThan(now + 1000);
+    // 12時間以上先(±数秒の誤差を許容)
+    expect(backoff).toBeGreaterThanOrEqual(now + 43200 - 5);
+  });
 });

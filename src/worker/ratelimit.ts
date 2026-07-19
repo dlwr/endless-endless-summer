@@ -86,8 +86,13 @@ export class RateLimitGuard {
 
   // Tumblr から 429 を受けたときに使う。ヘッダーが無く record() では backoff を
   // 判断できない場合の保険として、固定秒数だけ backoff する。
+  // 既存のより長い backoff がある場合は、それを上書きしない(extend-only)。
   async trip(now: number, seconds = DEFAULT_TRIP_SECONDS): Promise<void> {
-    await this.setBackoff(now + seconds);
+    const existing = (await this.kv.get(BACKOFF_KEY, "json")) as number | null;
+    const candidate = now + seconds;
+    if (existing === null || candidate > existing) {
+      await this.setBackoff(candidate);
+    }
   }
 
   private async setBackoff(at: number): Promise<void> {
