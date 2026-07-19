@@ -212,7 +212,7 @@ describe("Feed reblog dialog", () => {
 describe("Feed logout", () => {
   it("Logout ボタンで /auth/logout に POST される", async () => {
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
         const url = String(input);
         if (url.includes("/api/feed"))
           return Response.json({ posts: [post("1")] });

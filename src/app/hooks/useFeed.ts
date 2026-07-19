@@ -33,8 +33,10 @@ export function useFeed() {
       if (generation.current === gen) {
         if (err instanceof RateLimitedError) {
           setRateLimitedUntil(err.retryAt);
+          setError(null);
         } else {
           setError(errorMessage(err));
+          setRateLimitedUntil(null);
         }
       }
     } finally {
@@ -64,8 +66,10 @@ export function useFeed() {
       if (generation.current === gen) {
         if (err instanceof RateLimitedError) {
           setRateLimitedUntil(err.retryAt);
+          setError(null);
         } else {
           setError(errorMessage(err));
+          setRateLimitedUntil(null);
         }
       }
     } finally {
