@@ -92,9 +92,12 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
       return c.json({ ok: true });
     } catch (err) {
       if (err instanceof TumblrRateLimitError) {
-        // 書き込みはユーザー単位の別枠なので、/api/feed の共有 backoff は
-        // trip() しない(guard.check() もしていないので素通しのまま)。
+        // Tumblr の 1,000/hr 予算は全エンドポイント共有なので、
+        // ヘッダー無し 429 も backoff に記録する(ヘッダー付きなら
+        // onResponse→record が拾うが、ヘッダー無し 429 はここでキャッチする)。
         const now = Math.floor(Date.now() / 1000);
+        const guard = new RateLimitGuard(c.env.KV);
+        await guard.trip(now);
         return rateLimitedJson(c, now + DEFAULT_TRIP_SECONDS);
       }
       throw err;
@@ -118,8 +121,12 @@ export function registerApiRoutes(app: Hono<AppEnv>, deps: AppDeps): void {
       return c.json({ ok: true });
     } catch (err) {
       if (err instanceof TumblrRateLimitError) {
-        // like と同様、書き込みは /api/feed の共有 backoff を trip() しない。
+        // Tumblr の 1,000/hr 予算は全エンドポイント共有なので、
+        // ヘッダー無し 429 も backoff に記録する(ヘッダー付きなら
+        // onResponse→record が拾うが、ヘッダー無し 429 はここでキャッチする)。
         const now = Math.floor(Date.now() / 1000);
+        const guard = new RateLimitGuard(c.env.KV);
+        await guard.trip(now);
         return rateLimitedJson(c, now + DEFAULT_TRIP_SECONDS);
       }
       throw err;

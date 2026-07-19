@@ -25,7 +25,17 @@ async function setupSession(
       },
       env,
     );
-  return { kv, sid, app, env, getFeed, postLike };
+  const postReblog = (body: unknown) =>
+    app.request(
+      "/api/reblog",
+      {
+        method: "POST",
+        headers: { Cookie: `sid=${sid}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
+  return { kv, sid, app, env, getFeed, postLike, postReblog };
 }
 
 const session: Session = {
@@ -140,6 +150,37 @@ describe("POST /api/reblog", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it("Tumblr が 429 を返したら 429 と retryAt を返す", async () => {
+    const tumblr = fakeFetch({
+      "/v2/blog/mainblog/post/reblog": () =>
+        new Response("nope", { status: 429 }),
+    });
+    const res = await authedRequest(
+      "/api/reblog",
+      { id: "1", reblogKey: "rk" },
+      tumblr,
+    );
+    const body = (await res.json()) as { error: string; retryAt: number };
+
+    expect(res.status).toBe(429);
+    expect(body.error).toBe("rate_limited");
+  });
+});
+
+describe("POST /api/reblog レートリミット", () => {
+  it("/api/reblog で Tumblr が 429 を返すと backoff が設定される", async () => {
+    const tumblr = fakeFetch({
+      "/v2/blog/mainblog/post/reblog": () =>
+        new Response("nope", { status: 429 }),
+    });
+    const { kv, postReblog } = await setupSession(tumblr);
+    await postReblog({ id: "1", reblogKey: "rk" });
+
+    const backoff = await kv.get("ratelimit:backoff", "json");
+    expect(backoff).not.toBeNull();
+    expect(typeof backoff).toBe("number");
+  });
 });
 
 describe("GET /api/feed レートリミット", () => {
@@ -250,16 +291,15 @@ describe("POST /api/like レートリミット", () => {
     expect(tumblr.calls.length).toBe(1);
   });
 
-  it("書き込みの 429 は /api/feed の backoff を発生させない(別枠)", async () => {
+  it("/api/like で Tumblr が 429 を返すと backoff が設定される", async () => {
     const tumblr = fakeFetch({
       "/v2/user/like": () => new Response("nope", { status: 429 }),
-      "/v2/user/following": { response: { total_blogs: 0, blogs: [] } },
     });
-    const { postLike, getFeed } = await setupSession(tumblr);
+    const { kv, postLike } = await setupSession(tumblr);
     await postLike({ id: "1", reblogKey: "rk", like: true });
 
-    const res = await getFeed();
-
-    expect(res.status).toBe(200);
+    const backoff = await kv.get("ratelimit:backoff", "json");
+    expect(backoff).not.toBeNull();
+    expect(typeof backoff).toBe("number");
   });
 });

@@ -74,7 +74,13 @@ export class RateLimitGuard {
     // (書いても check() は素通しするので実害は無いが、既存の正しい backoff を
     // 誤って「解除済み」相当の値で上書きしないための安全策)
     if (backoffAt !== null && backoffAt > now) {
-      await this.setBackoff(backoffAt);
+      // 既存の値と同じなら KV 書き込みをスキップする。
+      const existing = (await this.kv.get(BACKOFF_KEY, "json")) as
+        | number
+        | null;
+      if (existing !== backoffAt) {
+        await this.setBackoff(backoffAt);
+      }
     }
   }
 

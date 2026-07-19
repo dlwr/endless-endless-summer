@@ -143,3 +143,32 @@ describe("RateLimitGuard.trip", () => {
     expect(await guard.check(now)).toBe(now + 60);
   });
 });
+
+describe("RateLimitGuard.record - redundant write optimization", () => {
+  it("同じ snapshot で 2 回 record しても KV put は 1 回だけ", async () => {
+    const kv = new FakeKV();
+    let putCount = 0;
+    const originalPut = kv.put.bind(kv);
+    kv.put = async (
+      key: string,
+      value: string,
+      opts?: { expirationTtl?: number },
+    ) => {
+      putCount++;
+      return originalPut(key, value, opts);
+    };
+
+    const snapshot = {
+      hourRemaining: 10,
+      dayRemaining: 10,
+      hourResetAt: now + 1800,
+      dayResetAt: now + 43200,
+    };
+
+    const guard = new RateLimitGuard(kv as unknown as KVNamespace);
+    await guard.record(snapshot, now);
+    await guard.record(snapshot, now);
+
+    expect(putCount).toBe(1);
+  });
+});
