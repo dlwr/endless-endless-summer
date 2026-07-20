@@ -266,6 +266,24 @@ describe("Feed reblog dialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("ダイアログ送信でリブログ成功後、対象カードに reblog-flash クラスが付く", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed"))
+        return Response.json({ posts: [post("1")] });
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Feed me={meWithBlog} />);
+    await screen.findByText("post 1");
+    await userEvent.keyboard("T");
+    await screen.findByRole("dialog");
+    await userEvent.click(screen.getByRole("button", { name: "Reblog" }));
+    await waitFor(() => {
+      expect(screen.getByRole("article")).toHaveClass("reblog-flash");
+    });
+  });
+
   it("Esc でダイアログが閉じフィードショートカットが復活する", async () => {
     vi.stubGlobal(
       "fetch",
