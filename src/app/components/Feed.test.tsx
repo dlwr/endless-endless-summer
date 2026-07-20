@@ -154,6 +154,29 @@ describe("Feed actions", () => {
     });
   });
 
+  it("t でリブログ成功後、対象カードに reblog-flash クラスが付く", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/feed"))
+        return Response.json({ posts: [post("1")] });
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <Feed
+        me={{
+          userName: "u",
+          blogs: [{ name: "mainblog", title: "M", primary: true, uuid: "x" }],
+        }}
+      />,
+    );
+    await screen.findByText("post 1");
+    await userEvent.keyboard("t");
+    await waitFor(() => {
+      expect(screen.getByRole("article")).toHaveClass("reblog-flash");
+    });
+  });
+
   it("r でリロールすると楽観更新の残留が消える", async () => {
     let feedCallCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

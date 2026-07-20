@@ -35,9 +35,15 @@ export function Feed({ me }: { me: Me }) {
   const [toast, setToast] = useState<string | null>(null);
   const [settings, setSettings] = useState(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // reblog 成功時に該当ポストのカードを一瞬光らせるための index。
+  // 700ms 後に自動でクリアされる(下の flashPost 参照)。
+  const [flashIndex, setFlashIndex] = useState<number | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
   // sentinel が交差通知を出しても visiblePosts が増えなかった("空振り")回数。
@@ -62,6 +68,8 @@ export function Feed({ me }: { me: Me }) {
     setFocusedIndex(0);
     setPostOverrides({});
     setDialogIndex(null);
+    setFlashIndex(null);
+    clearTimeout(flashTimer.current);
     emptyRoundsRef.current = 0;
     pendingAdvanceRef.current = false;
   }, []);
@@ -72,6 +80,10 @@ export function Feed({ me }: { me: Me }) {
 
   useEffect(() => {
     return () => clearTimeout(toastTimer.current);
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(flashTimer.current);
   }, []);
 
   useEffect(() => {
@@ -86,6 +98,15 @@ export function Feed({ me }: { me: Me }) {
     setToast(message);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  // reblog 成功時に対象カードを一瞬光らせる。連続で reblog された場合は
+  // 直前のタイマーを破棄して張り直す(古いタイマーが後から発火して
+  // 新しい flash を消してしまわないように)。
+  const flashPost = useCallback((index: number) => {
+    clearTimeout(flashTimer.current);
+    setFlashIndex(index);
+    flashTimer.current = setTimeout(() => setFlashIndex(null), 700);
   }, []);
 
   const viewPost = useCallback(
@@ -122,10 +143,13 @@ export function Feed({ me }: { me: Me }) {
       if (!post) return;
       const primary = me.blogs.find((b) => b.primary)?.name ?? "";
       reblogPost({ id: post.id, reblogKey: post.reblogKey })
-        .then(() => showToast(`Reblogged to ${primary}`))
+        .then(() => {
+          showToast(`Reblogged to ${primary}`);
+          flashPost(index);
+        })
         .catch(() => showToast("Reblog failed"));
     },
-    [viewPost, me.blogs, showToast],
+    [viewPost, me.blogs, showToast, flashPost],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: posts.length は effect 本体では未参照だが、observer 再生成のトリガーとして意図的に依存配列に含めている(効果内のコメント参照)
@@ -194,6 +218,8 @@ export function Feed({ me }: { me: Me }) {
         case "reroll":
           setFocusedIndex(0);
           setPostOverrides({});
+          setFlashIndex(null);
+          clearTimeout(flashTimer.current);
           emptyRoundsRef.current = 0;
           pendingAdvanceRef.current = false;
           reroll();
@@ -239,7 +265,8 @@ export function Feed({ me }: { me: Me }) {
   const submitDialogReblog = useCallback(
     (input: { blogName: string; comment: string; tags: string }) => {
       const post = dialogIndex !== null ? viewPost(dialogIndex) : undefined;
-      if (!post) return;
+      if (!post || dialogIndex === null) return;
+      const index = dialogIndex;
       setDialogIndex(null);
       reblogPost({
         id: post.id,
@@ -248,10 +275,13 @@ export function Feed({ me }: { me: Me }) {
         comment: input.comment || undefined,
         tags: input.tags || undefined,
       })
-        .then(() => showToast(`Reblogged to ${input.blogName}`))
+        .then(() => {
+          showToast(`Reblogged to ${input.blogName}`);
+          flashPost(index);
+        })
         .catch(() => showToast("Reblog failed"));
     },
-    [dialogIndex, viewPost, showToast],
+    [dialogIndex, viewPost, showToast, flashPost],
   );
 
   return (
@@ -286,6 +316,7 @@ export function Feed({ me }: { me: Me }) {
             <PostCard
               post={viewPost(index) ?? post}
               focused={index === focusedIndex}
+              flashing={index === flashIndex}
               onLike={() => toggleLike(index)}
               onReblog={() => instantReblog(index)}
               onReblogDialog={() => setDialogIndex(index)}

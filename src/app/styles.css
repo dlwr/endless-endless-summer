@@ -299,6 +299,30 @@ body {
   }
 }
 
+/* reblog 成功時、対象カードを一度だけパルスさせて操作結果を視覚的に確認
+   できるようにする(トーストは画面下部で見落としやすいため、カード自体
+   にもフィードバックを添える)。 */
+.post-card.reblog-flash {
+  animation: reblog-flash 0.7s var(--ease) 1;
+}
+
+@keyframes reblog-flash {
+  0% {
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+  30% {
+    background: color-mix(in srgb, var(--accent) 12%, var(--card));
+    box-shadow:
+      0 0 0 4px var(--accent-glow),
+      var(--shadow);
+  }
+  100% {
+    background: var(--card);
+    box-shadow: var(--shadow);
+  }
+}
+
 .post-card img,
 .post-card video,
 .post-card iframe {
@@ -887,5 +911,13 @@ kbd {
   .dialog-backdrop,
   .toast {
     animation: none;
+  }
+
+  /* パルスの代わりに、動きのない静的なハイライトで reblog 成功を示す */
+  .post-card.reblog-flash {
+    animation: none;
+    box-shadow:
+      0 0 0 4px var(--accent-glow),
+      var(--shadow);
   }
 }

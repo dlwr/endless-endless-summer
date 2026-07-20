@@ -20,11 +20,12 @@ const basePost: FeedPost = {
 
 const noop = () => {};
 
-function renderCard(post: FeedPost, focused = false) {
+function renderCard(post: FeedPost, focused = false, flashing = false) {
   return render(
     <PostCard
       post={post}
       focused={focused}
+      flashing={flashing}
       onLike={noop}
       onReblog={noop}
       onReblogDialog={noop}
@@ -55,6 +56,11 @@ describe("PostCard", () => {
   it("focused のときは focused クラスが付く", () => {
     renderCard(basePost, true);
     expect(screen.getByRole("article")).toHaveClass("focused");
+  });
+
+  it("flashing のときは reblog-flash クラスが付く", () => {
+    renderCard(basePost, false, true);
+    expect(screen.getByRole("article")).toHaveClass("reblog-flash");
   });
 
   it("投稿年が表示される", () => {

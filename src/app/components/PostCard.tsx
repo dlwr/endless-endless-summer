@@ -5,6 +5,7 @@ import { safeUrl } from "../npf/safe-url";
 type Props = {
   post: FeedPost;
   focused: boolean;
+  flashing: boolean;
   onLike: () => void;
   onReblog: () => void;
   onReblogDialog: () => void;
@@ -22,13 +23,21 @@ function formatDate(timestamp: number): string {
 export function PostCard({
   post,
   focused,
+  flashing,
   onLike,
   onReblog,
   onReblogDialog,
 }: Props) {
   const href = safeUrl(post.postUrl);
+  const className = [
+    "post-card",
+    focused ? "focused" : "",
+    flashing ? "reblog-flash" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <article className={`post-card${focused ? " focused" : ""}`}>
+    <article className={className}>
       <header className="post-header">
         <span className="post-blog-name">{post.blogName}</span>
         {href ? (
