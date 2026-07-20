@@ -101,11 +101,11 @@ describe("TumblrClient", () => {
     expect(blogs.map((b) => b.name)).toEqual(["a", "b", "c"]);
   });
 
-  it("following は複数ページを並列取得しても offset 順に連結する", async () => {
+  // offset=0 を最も遅く解決させることで、応答順ではなく offset 順に連結
+  // していること・並列に発行されていることの両方を検証できる fixture。
+  function setUpMultiPageFollowing() {
     const totalBlogs = 50;
     const limit = 20;
-    // offset=0 を最も遅く解決させることで、応答順ではなく offset 順に
-    // 連結していることを検証する。
     const delays: Record<number, number> = { 0: 30, 20: 10, 40: 0 };
     let inFlight = 0;
     let maxConcurrent = 0;
@@ -125,14 +125,24 @@ describe("TumblrClient", () => {
         return { response: { total_blogs: totalBlogs, blogs } };
       },
     });
+    return { totalBlogs, fetchFn, maxConcurrent: () => maxConcurrent };
+  }
+
+  it("following は3ページにまたがっても全件・正順で返る", async () => {
+    const { totalBlogs, fetchFn } = setUpMultiPageFollowing();
     const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
     const blogs = await client.following();
     expect(blogs.map((b) => b.name)).toEqual(
       Array.from({ length: totalBlogs }, (_, i) => `blog-${i}`),
     );
+  });
+
+  it("following は残りページを1ページ目の応答を待たず並列に取得する", async () => {
+    const { fetchFn, maxConcurrent } = setUpMultiPageFollowing();
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    await client.following();
     expect(fetchFn.calls.length).toBe(3);
-    // 残り2ページ(offset=20,40)は1ページ目のレスポンスを待たず同時に飛ぶはず
-    expect(maxConcurrent).toBeGreaterThan(1);
+    expect(maxConcurrent()).toBeGreaterThan(1);
   });
 
   it("posts は npf=true と before を付けて呼ぶ", async () => {
