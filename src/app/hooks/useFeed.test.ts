@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FeedPost } from "../../shared/types";
+import { startFeedPrefetch, takeFeedPrefetch } from "../feedPrefetch";
 import { useFeed } from "./useFeed";
 
 const post = (id: string): FeedPost => ({
@@ -17,6 +18,8 @@ const post = (id: string): FeedPost => ({
 });
 
 afterEach(() => {
+  // 未消費のまま残った prefetch が他のテストへ漏れないようにする。
+  takeFeedPrefetch()?.catch(() => {});
   vi.unstubAllGlobals();
 });
 
@@ -95,6 +98,19 @@ describe("useFeed", () => {
     });
 
     expect(result.current.posts.map((p) => p.id)).toEqual(["B"]);
+  });
+
+  it("prefetch 済みなら初回 loadMore は新たな fetch を発行しない", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ posts: [post("1")] }));
+    vi.stubGlobal("fetch", fetchMock);
+    startFeedPrefetch();
+    expect(fetchMock.mock.calls.length).toBe(1);
+
+    const { result } = renderHook(() => useFeed());
+    await act(() => result.current.loadMore());
+
+    expect(fetchMock.mock.calls.length).toBe(1);
+    expect(result.current.posts.map((p) => p.id)).toEqual(["1"]);
   });
 
   it("reroll 連打では fetch は 1 回しか呼ばれない", async () => {

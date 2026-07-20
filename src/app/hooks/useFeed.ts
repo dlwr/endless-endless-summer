@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { FeedPost } from "../../shared/types";
 import { fetchFeed, RateLimitedError } from "../api";
+import { takeFeedPrefetch } from "../feedPrefetch";
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -23,7 +24,11 @@ export function useFeed() {
     setLoading(true);
     const gen = generation.current;
     try {
-      const batch = await fetchFeed();
+      // マウント時に App が先読み(startFeedPrefetch)しておいた feed があれば
+      // それを使い、/api/me とのウォーターフォールを解消する。無ければ通常通り
+      // fetchFeed() する。prefetch が reject した場合(未ログインで先読みした
+      // 401 等)も下の catch にそのまま流れ、既存のエラー処理と合流する。
+      const batch = await (takeFeedPrefetch() ?? fetchFeed());
       if (generation.current === gen) {
         setPosts((prev) => [...prev, ...batch]);
         setError(null);
