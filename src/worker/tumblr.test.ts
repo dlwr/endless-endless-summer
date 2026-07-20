@@ -101,6 +101,40 @@ describe("TumblrClient", () => {
     expect(blogs.map((b) => b.name)).toEqual(["a", "b", "c"]);
   });
 
+  it("following は複数ページを並列取得しても offset 順に連結する", async () => {
+    const totalBlogs = 50;
+    const limit = 20;
+    // offset=0 を最も遅く解決させることで、応答順ではなく offset 順に
+    // 連結していることを検証する。
+    const delays: Record<number, number> = { 0: 30, 20: 10, 40: 0 };
+    let inFlight = 0;
+    let maxConcurrent = 0;
+    const fetchFn = fakeFetch({
+      "/v2/user/following": async (req) => {
+        const offset = Number(new URL(req.url).searchParams.get("offset"));
+        inFlight++;
+        maxConcurrent = Math.max(maxConcurrent, inFlight);
+        await new Promise((resolve) =>
+          setTimeout(resolve, delays[offset] ?? 0),
+        );
+        inFlight--;
+        const blogs = Array.from(
+          { length: Math.min(limit, totalBlogs - offset) },
+          (_, i) => ({ name: `blog-${offset + i}` }),
+        );
+        return { response: { total_blogs: totalBlogs, blogs } };
+      },
+    });
+    const client = new TumblrClient(liveTokens, creds, async () => {}, fetchFn);
+    const blogs = await client.following();
+    expect(blogs.map((b) => b.name)).toEqual(
+      Array.from({ length: totalBlogs }, (_, i) => `blog-${i}`),
+    );
+    expect(fetchFn.calls.length).toBe(3);
+    // 残り2ページ(offset=20,40)は1ページ目のレスポンスを待たず同時に飛ぶはず
+    expect(maxConcurrent).toBeGreaterThan(1);
+  });
+
   it("posts は npf=true と before を付けて呼ぶ", async () => {
     const fetchFn = fakeFetch({
       "/v2/blog/example/posts": { response: { posts: [{ id_string: "1" }] } },

@@ -143,18 +143,36 @@ export class TumblrClient {
   }
 
   async following(): Promise<FollowingBlog[]> {
-    const blogs: FollowingBlog[] = [];
     const limit = 20;
     const maxPages = 50;
-    for (let page = 0; page < maxPages; page++) {
-      const res = await this.request<{
-        total_blogs: number;
-        blogs: FollowingBlog[];
-      }>(`/user/following?limit=${limit}&offset=${page * limit}`);
-      blogs.push(...res.blogs);
-      if (blogs.length >= res.total_blogs || res.blogs.length === 0) break;
+
+    const first = await this.request<{
+      total_blogs: number;
+      blogs: FollowingBlog[];
+    }>(`/user/following?limit=${limit}&offset=0`);
+
+    const pages: FollowingBlog[][] = [first.blogs];
+    const remaining = first.total_blogs - first.blogs.length;
+    // 1ページ目が空ならそれ以上ページが無いとみなし、以降は取得しない
+    // (元の逐次実装の「空ページで打ち切る」耐性を踏襲)。
+    if (first.blogs.length > 0 && remaining > 0) {
+      const additionalPages = Math.min(
+        Math.ceil(remaining / limit),
+        maxPages - 1,
+      );
+      const rest = await Promise.all(
+        Array.from({ length: additionalPages }, (_, i) => {
+          const page = i + 1;
+          return this.request<{
+            total_blogs: number;
+            blogs: FollowingBlog[];
+          }>(`/user/following?limit=${limit}&offset=${page * limit}`);
+        }),
+      );
+      for (const res of rest) pages.push(res.blogs);
     }
-    return blogs;
+
+    return pages.flat();
   }
 
   async posts(
