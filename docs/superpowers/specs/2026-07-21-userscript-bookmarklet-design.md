@@ -34,7 +34,7 @@ Tumblr API のレートリミット緩和申請が却下された。現行の We
 1. `@run-at document_start` で Tumblr 本体より先に `window.fetch` をラップする。**これが成立の前提**: アプリは初期化時に `window.fetch` をキャッシュするため、先にラップすればアプリがキャッシュするのが我々のラッパーになる。ロード後起動では素通りする(spike 実証)。
 2. ダッシュボードタイムライン API(`/api/v2/timeline/dashboard`)への送信リクエストのヘッダーから **Bearer トークンを捕獲**する(値はメモリ内に留め、保存も露出もしない)。cookie 単独では内部 API は 401、captured token で 200(spike 実証)。
 3. 捕獲トークンで内部 API を叩く: フォロー一覧 → ランダムブログ選択 → `/api/v2/blog/{name}/posts?before=…` でランダム過去ポストを取得。**取得元は snake_case、注入先(dashboard elements)は camelCase** なので、`packages/core` の深変換で camelCase 化してから注入する(フィールド集合は同一)。
-4. レスポンスの `timeline.elements` を(camel 化した)ランダム過去ポストに差し替えて返す。描画は Tumblr 本体の React が行うため、リブログ・ライク・ノート表示・本家キーボード操作はネイティブに動く(spike で描画実証、リブログは実装初期に確認)。
+4. レスポンスの `timeline.elements` を(camel 化した)ランダム過去ポストに差し替えて返す。描画は Tumblr 本体の React が行うため、リブログ・ライク・ノート表示・本家キーボード操作はネイティブに動く(spike で描画・リブログ・`J/K/T/L` 実証済み)。
 5. **ページングの一貫生成が必須**: 丸ごと固定置換は同一 ID の返却で無限ローディングに陥る(spike で確認)。`_links.next` を自前カーソルに差し替え、要素ごとに `streamGlobalPosition`/`streamSessionId` を単調生成し、ページごとに新しいランダムポスト・ユニーク ID を返して前進させる。
 6. **初回画面の扱い**: 初回表示分はサーバー埋め込み(`___INITIAL_STATE___`)で fetch を経由しない可能性が高い。起動直後に再取得を誘発するか、埋め込み state を書き換えて初回から置換する。
 7. キャッシュ(最古ポスト日時等)は `GM_setValue` があれば使い、なければ `localStorage`。
@@ -65,7 +65,7 @@ esbuild で `.user.js`(Tampermonkey ヘッダー付き、`@run-at document_start
 3. **スキーマ差**: dashboard=camelCase / blog posts=snake_case、フィールド同一。深変換で橋渡し(実証)。
 4. **丸ごと置換の失敗**: ページングが壊れ無限ローディング → 自前封筒生成が必要。
 5. **ブックマークレット非互換**(旧検証 C): 成立せず。ロード後起動では fetch 介入不可 → 形態撤回。
-6. **残検証**: 注入ポストのネイティブ**リブログ**成否(実装初期に確認)。
+6. **ネイティブキーボード**: 成立。注入ポストでも `J/K`=移動、`T`=リブログ、`L`=ライクが動作。userscript で自前実装が要るのは非ネイティブな `r`=リロール・`?`=ヘルプ・`o`=元ポスト新規タブ程度。
 
 ## 配布
 
