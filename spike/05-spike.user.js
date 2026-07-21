@@ -4,7 +4,7 @@
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
 // @grant        none
-// @version      0.3
+// @version      0.4
 // @description  Feasibility spike: can a document_start page-context hook intercept & rewrite the dashboard timeline response?
 // ==/UserScript==
 
@@ -13,10 +13,12 @@
 //     介入+書き換え+React 再描画が成立。フックが発火しなければ SW/埋め込み。
 //   Stage 2(認証あり・丸ごと置換): localStorage.setItem('esSpikeStage','2') → リロード。
 //     ※ page ごと置換するとページングが壊れて無限ローディングになる既知の失敗。
-//   Stage 3(認証あり・先頭 prepend・診断本命): localStorage.setItem('esSpikeStage','3') → リロード。
-//     初回レスポンスにだけ donor を数件 prepend し、以降は素通り(_links 温存)。
-//     本物ポストに混ざって donor が描画されるか=スキーマ互換性を切り分ける。
-//     同時に本物ポスト要素のキーもログして snake/camel を直接比較する。
+//   Stage 3(認証あり・先頭 prepend・診断): localStorage.setItem('esSpikeStage','3') → リロード。
+//     donor を素の snake_case のまま先頭 prepend。ダッシュボードは camelCase なので
+//     先頭 donor は描画されない想定(スキーマ不一致の確認用)。
+//   Stage 4(認証あり・変換して prepend・本命): localStorage.setItem('esSpikeStage','4') → リロード。
+//     donor を snake→camel 深変換してから先頭 prepend。変換後ポストがネイティブ描画
+//     されれば全経路成立。描画されたら1件リブログして成功確認(後で削除)。
 //   戻す: localStorage.removeItem('esSpikeStage')
 
 (() => {
@@ -31,6 +33,17 @@
 	let injectedOnce = false;
 
 	const isDash = (url) => url.includes('/api/v2/timeline/dashboard');
+
+	const toCamel = (s) => s.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+	const deepCamel = (v) => {
+		if (Array.isArray(v)) return v.map(deepCamel);
+		if (v && typeof v === 'object') {
+			const out = {};
+			for (const [k, val] of Object.entries(v)) out[toCamel(k)] = deepCamel(val);
+			return out;
+		}
+		return v;
+	};
 
 	const jsonResponse = (body) =>
 		new Response(JSON.stringify(body), {
@@ -140,19 +153,24 @@
 				return jsonResponse(body);
 			}
 
-			if (STAGE === 3) {
+			if (STAGE === 3 || STAGE === 4) {
 				if (injectedOnce) {
-					log('stage 3: already injected once — passthrough (keep pagination)');
+					log('stage', STAGE, ': already injected once — passthrough (keep pagination)');
 					return res;
 				}
 				const donor = await fetchDonor();
 				if (!donor) {
-					log('stage 3: donor fetch failed — passthrough');
+					log('stage', STAGE, ': donor fetch failed — passthrough');
 					return res;
 				}
 				injectedOnce = true;
-				body.response.timeline.elements = [...donor.slice(0, 3), ...els];
-				log('stage 3: prepended 3 donor posts to', els.length, 'real elements');
+				const picked = donor.slice(0, 3);
+				const inject = STAGE === 4 ? picked.map(deepCamel) : picked;
+				if (STAGE === 4) {
+					log('stage 4: transformed donor sample keys', Object.keys(inject[0] || {}).slice(0, 12));
+				}
+				body.response.timeline.elements = [...inject, ...els];
+				log('stage', STAGE, ': prepended 3 donor posts to', els.length, 'real elements');
 				return jsonResponse(body);
 			}
 
