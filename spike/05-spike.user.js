@@ -4,7 +4,7 @@
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
 // @grant        none
-// @version      0.1
+// @version      0.2
 // @description  Feasibility spike: can a document_start page-context hook intercept & rewrite the dashboard timeline response?
 // ==/UserScript==
 
@@ -34,6 +34,24 @@
 			headers: { 'Content-Type': 'application/json' },
 		});
 
+	const fetchDonorFromBlog = async (h, name) => {
+		// まず before=2020-01-01 で古いポストを狙い、空なら before なし(最新)で再試行
+		for (const qs of [
+			'npf=true&limit=10&before=1577836800',
+			'npf=true&limit=10',
+		]) {
+			const pRes = await origFetch(
+				`https://www.tumblr.com/api/v2/blog/${name}/posts?${qs}`,
+				{ headers: h },
+			);
+			const pBody = await pRes.json().catch(() => null);
+			const posts = pBody?.response?.posts || [];
+			log('donor try', name, qs.includes('before') ? '(old)' : '(recent)', 'status', pRes.status, 'count', posts.length);
+			if (posts.length) return posts;
+		}
+		return null;
+	};
+
 	const fetchDonor = async () => {
 		try {
 			const h = { Authorization: capturedAuth };
@@ -44,25 +62,15 @@
 			const fBody = await fRes.json();
 			const blogs = fBody?.response?.blogs || [];
 			log('donor: following status', fRes.status, 'blogs', blogs.length);
-			if (!blogs.length) return null;
-			const blog = blogs[Math.floor(blogs.length / 2)];
-			const pRes = await origFetch(
-				`https://www.tumblr.com/api/v2/blog/${blog.name}/posts?npf=true&limit=10&before=1577836800`,
-				{ headers: h },
-			);
-			const pBody = await pRes.json();
-			const posts = pBody?.response?.posts || [];
-			log(
-				'donor blog:',
-				blog.name,
-				'posts status',
-				pRes.status,
-				'count',
-				posts.length,
-				'sample keys',
-				Object.keys(posts[0] || {}),
-			);
-			return posts.length ? posts : null;
+			// ポストが取れるまで最大5ブログ試す
+			for (const blog of blogs.slice(0, 5)) {
+				const posts = await fetchDonorFromBlog(h, blog.name);
+				if (posts) {
+					log('donor selected:', blog.name, 'posts', posts.length, 'sample keys', Object.keys(posts[0] || {}));
+					return posts;
+				}
+			}
+			return null;
 		} catch (e) {
 			log('donor error:', e && e.message);
 			return null;
