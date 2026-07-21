@@ -4,17 +4,19 @@
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
 // @grant        none
-// @version      0.2
+// @version      0.3
 // @description  Feasibility spike: can a document_start page-context hook intercept & rewrite the dashboard timeline response?
 // ==/UserScript==
 
-// 使い方:
-//   Stage 1(認証ゼロ・既定): インストールして tumblr.com/dashboard を開く。
-//     コンソール(pattern: [spike])を確認。既存ポストの並び順が反転して見えれば
-//     「介入 + レスポンス書き換え + React 再描画」が成立。フックが一度も発火しなければ
-//     タイムライン取得は Service Worker 発 or サーバー埋め込み → 設計に重大影響。
-//   Stage 2(認証あり): コンソールで localStorage.setItem('esSpikeStage','2') → リロード。
-//     フォロー中ブログの過去ポストを取得して丸ごと置換する。描画されたらリブログを手動で試す。
+// 使い方(コンソール pattern: [spike]):
+//   Stage 1(認証ゼロ・既定): 既存 elements を反転。並びが反転して見えれば
+//     介入+書き換え+React 再描画が成立。フックが発火しなければ SW/埋め込み。
+//   Stage 2(認証あり・丸ごと置換): localStorage.setItem('esSpikeStage','2') → リロード。
+//     ※ page ごと置換するとページングが壊れて無限ローディングになる既知の失敗。
+//   Stage 3(認証あり・先頭 prepend・診断本命): localStorage.setItem('esSpikeStage','3') → リロード。
+//     初回レスポンスにだけ donor を数件 prepend し、以降は素通り(_links 温存)。
+//     本物ポストに混ざって donor が描画されるか=スキーマ互換性を切り分ける。
+//     同時に本物ポスト要素のキーもログして snake/camel を直接比較する。
 //   戻す: localStorage.removeItem('esSpikeStage')
 
 (() => {
@@ -25,6 +27,8 @@
 	const origFetch = window.fetch.bind(window);
 	let capturedAuth = null; // クロージャ内に留め、ログにも戻り値にも出さない
 	let firedForDashboard = false;
+	let donorCache = null;
+	let injectedOnce = false;
 
 	const isDash = (url) => url.includes('/api/v2/timeline/dashboard');
 
@@ -35,11 +39,7 @@
 		});
 
 	const fetchDonorFromBlog = async (h, name) => {
-		// まず before=2020-01-01 で古いポストを狙い、空なら before なし(最新)で再試行
-		for (const qs of [
-			'npf=true&limit=10&before=1577836800',
-			'npf=true&limit=10',
-		]) {
+		for (const qs of ['npf=true&limit=10&before=1577836800', 'npf=true&limit=10']) {
 			const pRes = await origFetch(
 				`https://www.tumblr.com/api/v2/blog/${name}/posts?${qs}`,
 				{ headers: h },
@@ -53,6 +53,7 @@
 	};
 
 	const fetchDonor = async () => {
+		if (donorCache) return donorCache;
 		try {
 			const h = { Authorization: capturedAuth };
 			const fRes = await origFetch(
@@ -62,11 +63,11 @@
 			const fBody = await fRes.json();
 			const blogs = fBody?.response?.blogs || [];
 			log('donor: following status', fRes.status, 'blogs', blogs.length);
-			// ポストが取れるまで最大5ブログ試す
 			for (const blog of blogs.slice(0, 5)) {
 				const posts = await fetchDonorFromBlog(h, blog.name);
 				if (posts) {
 					log('donor selected:', blog.name, 'posts', posts.length, 'sample keys', Object.keys(posts[0] || {}));
+					donorCache = posts;
 					return posts;
 				}
 			}
@@ -77,14 +78,23 @@
 		}
 	};
 
+	// ダッシュボードの「本物のポスト要素」のキーを拾って snake/camel を確認する
+	const logRealPostSchema = (els) => {
+		const postEl =
+			els.find((e) => (e.objectType || e.object_type) === 'post') ||
+			els.find((e) => Object.keys(e).length > 25);
+		log(
+			'dashboard REAL post-element keys:',
+			postEl ? Object.keys(postEl) : 'none found',
+		);
+	};
+
 	window.fetch = async (input, init) => {
 		const url = typeof input === 'string' ? input : (input && input.url) || '';
 
 		if (STAGE >= 2 && !capturedAuth && url.includes('/api/v2/')) {
 			const h =
-				input instanceof Request
-					? input.headers
-					: new Headers(init && init.headers);
+				input instanceof Request ? input.headers : new Headers(init && init.headers);
 			if (h.get('Authorization')) {
 				capturedAuth = h.get('Authorization');
 				log('auth captured (kept internal)');
@@ -103,35 +113,50 @@
 			}
 			if (!firedForDashboard) {
 				firedForDashboard = true;
-				log(
-					'FIRST dashboard interception — was this the initial page paint or after scroll? note it.',
-				);
+				log('FIRST dashboard interception — initial paint or after scroll? note it.');
 			}
-			log(
-				'INTERCEPTED dashboard — elements',
-				els.length,
-				'sample keys',
-				Object.keys(els[0] || {}),
-			);
+			log('INTERCEPTED dashboard — elements', els.length);
+			logRealPostSchema(els);
 
 			if (STAGE === 1) {
 				body.response.timeline.elements = [...els].reverse();
-				log('stage 1: reversed existing elements (no credentials) — returning modified');
+				log('stage 1: reversed existing elements — returning modified');
 				return jsonResponse(body);
 			}
 
 			if (!capturedAuth) {
-				log('stage 2: no auth captured yet — passthrough');
+				log('stage', STAGE, ': no auth captured yet — passthrough');
 				return res;
 			}
-			const donor = await fetchDonor();
-			if (!donor) {
-				log('stage 2: donor fetch failed — passthrough');
-				return res;
+
+			if (STAGE === 2) {
+				const donor = await fetchDonor();
+				if (!donor) {
+					log('stage 2: donor fetch failed — passthrough');
+					return res;
+				}
+				body.response.timeline.elements = donor;
+				log('stage 2: REPLACED with donor posts', donor.length);
+				return jsonResponse(body);
 			}
-			body.response.timeline.elements = donor;
-			log('stage 2: REPLACED with donor posts', donor.length);
-			return jsonResponse(body);
+
+			if (STAGE === 3) {
+				if (injectedOnce) {
+					log('stage 3: already injected once — passthrough (keep pagination)');
+					return res;
+				}
+				const donor = await fetchDonor();
+				if (!donor) {
+					log('stage 3: donor fetch failed — passthrough');
+					return res;
+				}
+				injectedOnce = true;
+				body.response.timeline.elements = [...donor.slice(0, 3), ...els];
+				log('stage 3: prepended 3 donor posts to', els.length, 'real elements');
+				return jsonResponse(body);
+			}
+
+			return res;
 		} catch (e) {
 			log('replace failed — passthrough:', e && e.message);
 			return res;
