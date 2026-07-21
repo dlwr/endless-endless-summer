@@ -1,0 +1,1 @@
+javascript:(()=>{console.log('[spike-bm] executed on',location.href);const o=window.fetch;window.fetch=async(...a)=>{console.log('[spike-bm] fetch intercepted:',typeof a[0]==='string'?a[0]:a[0].url);window.fetch=o;return o(...a)};console.log('[spike-bm] fetch wrapped once')})();
