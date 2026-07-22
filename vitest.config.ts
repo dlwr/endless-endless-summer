@@ -11,25 +11,12 @@ export default defineConfig({
         },
       },
       {
-        test: {
-          name: "worker",
-          environment: "node",
-          include: ["src/worker/**/*.test.ts", "src/shared/**/*.test.ts"],
-        },
-      },
-      {
+        // 既定は node。DOM が要るテスト(storage/hook)は
+        // ファイル冒頭の `// @vitest-environment jsdom` で個別に上書きする。
         test: {
           name: "userscript",
           environment: "node",
           include: ["src/userscript/**/*.test.ts"],
-        },
-      },
-      {
-        test: {
-          name: "app",
-          environment: "jsdom",
-          include: ["src/app/**/*.test.ts", "src/app/**/*.test.tsx"],
-          setupFiles: ["./vitest.setup.ts"],
         },
       },
     ],

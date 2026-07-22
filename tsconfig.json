@@ -4,8 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["@cloudflare/workers-types", "vite/client"],
-    "jsx": "react-jsx",
+    "types": [],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -13,5 +12,5 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "vitest.setup.ts"]
+  "include": ["src"]
 }
