@@ -1,5 +1,5 @@
+import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "../core/sampling";
 import type { FeedPost, NpfBlock, PostKind, TrailItem } from "../shared/types";
-import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "./sampling";
 import {
   type RawPost,
   type TumblrClient,

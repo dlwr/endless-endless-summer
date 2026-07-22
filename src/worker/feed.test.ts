@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { TUMBLR_EPOCH } from "../core/sampling";
 import { buildFeed, deriveKind, normalizePost } from "./feed";
-import { TUMBLR_EPOCH } from "./sampling";
 import { FakeKV } from "./test-helpers";
 import { type RawPost, TumblrRateLimitError } from "./tumblr";
 
