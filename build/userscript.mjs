@@ -8,6 +8,10 @@ const banner = `// ==UserScript==
 // @grant        none
 // @version      1.0.0
 // @description  Tumblr dashboard を年均等ランダムな過去ポストに置き換える
+// @homepageURL  https://github.com/dlwr/endless-endless-summer
+// @supportURL   https://github.com/dlwr/endless-endless-summer/issues
+// @downloadURL  https://github.com/dlwr/endless-endless-summer/releases/latest/download/endless-endless-summer.user.js
+// @updateURL    https://github.com/dlwr/endless-endless-summer/releases/latest/download/endless-endless-summer.user.js
 // ==/UserScript==`;
 
 await build({
