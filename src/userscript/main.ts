@@ -14,6 +14,9 @@ function installToggleButton(
   setEnabled: (v: boolean) => void,
 ): void {
   const btn = document.createElement("button");
+  // キーボードフォーカスを一切奪わない。フォーカスがボタンに移ると Tumblr の
+  // ショートカット(J/K/T/L)が「操作要素にフォーカス中」と見なされ無効化される。
+  btn.tabIndex = -1;
   btn.style.cssText =
     "position:fixed;bottom:12px;right:12px;z-index:99999;padding:6px 10px;" +
     "background:#001935;color:#fff;border:1px solid #35465c;border-radius:6px;" +
@@ -21,9 +24,12 @@ function installToggleButton(
   const render = () => {
     btn.textContent = getEnabled() ? "∞ summer: on" : "∞ summer: off";
   };
+  // mousedown の既定動作(フォーカス移動)を止める + 念のため blur
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
   btn.addEventListener("click", () => {
     setEnabled(!getEnabled());
     render();
+    btn.blur();
   });
   render();
   const mount = () => {
