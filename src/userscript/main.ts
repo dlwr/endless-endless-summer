@@ -5,9 +5,33 @@ import { createInternalClient, type FetchLike } from "./internal-client";
 import { createStorage } from "./storage";
 import { createPager } from "./timeline-page";
 
-declare const GM_registerMenuCommand:
-  | ((label: string, fn: () => void) => void)
-  | undefined;
+const ENABLED_KEY = "ees:enabled";
+
+// @grant none で動かすためページコンテキスト。GM API は使わず、トグルは
+// ページ内のフローティングボタン + localStorage 永続化で実現する。
+function installToggleButton(
+  getEnabled: () => boolean,
+  setEnabled: (v: boolean) => void,
+): void {
+  const btn = document.createElement("button");
+  btn.style.cssText =
+    "position:fixed;bottom:12px;right:12px;z-index:99999;padding:6px 10px;" +
+    "background:#001935;color:#fff;border:1px solid #35465c;border-radius:6px;" +
+    "font:12px/1 system-ui,sans-serif;cursor:pointer;opacity:0.85;";
+  const render = () => {
+    btn.textContent = getEnabled() ? "∞ summer: on" : "∞ summer: off";
+  };
+  btn.addEventListener("click", () => {
+    setEnabled(!getEnabled());
+    render();
+  });
+  render();
+  const mount = () => {
+    if (document.body) document.body.appendChild(btn);
+    else requestAnimationFrame(mount);
+  };
+  mount();
+}
 
 (() => {
   const w = window as unknown as { fetch: HookedFetch };
@@ -17,7 +41,7 @@ declare const GM_registerMenuCommand:
     origFetch(url, init) as unknown as ReturnType<FetchLike>;
 
   let token: string | null = null;
-  let enabled = true; // 既定 ON。トグルで反転
+  let enabled = localStorage.getItem(ENABLED_KEY) !== "0"; // 既定 ON
   const storage = createStorage();
   const pager = createPager();
   const client = createInternalClient({
@@ -50,9 +74,14 @@ declare const GM_registerMenuCommand:
     pager,
   });
 
-  GM_registerMenuCommand?.("endless-endless-summer: toggle", () => {
-    enabled = !enabled;
-    console.log("[ees] enabled:", enabled);
-  });
+  installToggleButton(
+    () => enabled,
+    (v) => {
+      enabled = v;
+      localStorage.setItem(ENABLED_KEY, v ? "1" : "0");
+      console.log("[ees] enabled:", v);
+    },
+  );
+
   console.log("[ees] installed at document_start");
 })();

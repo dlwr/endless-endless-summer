@@ -5,9 +5,7 @@ const banner = `// ==UserScript==
 // @namespace    dlwr
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
-// @grant        GM_getValue
-// @grant        GM_setValue
-// @grant        GM_registerMenuCommand
+// @grant        none
 // @version      1.0.0
 // @description  Tumblr dashboard を年均等ランダムな過去ポストに置き換える
 // ==/UserScript==`;
