@@ -1,0 +1,6 @@
+{
+  "response": {
+    "total_blogs": 2,
+    "blogs": [{ "name": "alpha" }, { "name": "beta" }]
+  }
+}
