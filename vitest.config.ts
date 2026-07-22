@@ -5,9 +5,23 @@ export default defineConfig({
     projects: [
       {
         test: {
+          name: "core",
+          environment: "node",
+          include: ["src/core/**/*.test.ts"],
+        },
+      },
+      {
+        test: {
           name: "worker",
           environment: "node",
           include: ["src/worker/**/*.test.ts", "src/shared/**/*.test.ts"],
+        },
+      },
+      {
+        test: {
+          name: "userscript",
+          environment: "node",
+          include: ["src/userscript/**/*.test.ts"],
         },
       },
       {
