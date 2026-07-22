@@ -1,10 +1,11 @@
-import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "../core/sampling";
-import type { FeedPost, NpfBlock, PostKind, TrailItem } from "../shared/types";
 import {
+  type FeedClient as CoreFeedClient,
   type RawPost,
-  type TumblrClient,
-  TumblrRateLimitError,
-} from "./tumblr";
+  type Storage,
+  sampleFeed,
+} from "../core/feed-sampling";
+import type { FeedPost, NpfBlock, PostKind, TrailItem } from "../shared/types";
+import { TumblrRateLimitError } from "./tumblr";
 
 // Tumblr consumer key の呼び出し予算(1,000/時・5,000/日、全ユーザー共有)を
 // 節約するため、1 バッチあたりのサンプル数を控えめにしている。
@@ -12,7 +13,7 @@ export const SAMPLES_PER_BATCH = 4;
 export const POSTS_PER_SAMPLE = 2;
 export const FOLLOWING_TTL = 3600;
 
-export type FeedClient = Pick<TumblrClient, "following" | "posts">;
+export type FeedClient = CoreFeedClient;
 
 export function deriveKind(blocks: NpfBlock[]): PostKind {
   const types = new Set(blocks.map((b) => b.type));
@@ -45,73 +46,35 @@ export function normalizePost(raw: RawPost): FeedPost {
   };
 }
 
-function shuffle<T>(items: T[], rng: Rng): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
-async function cachedFollowing(
-  client: FeedClient,
-  kv: KVNamespace,
-  userName: string,
-): Promise<{ name: string }[]> {
-  const key = `following:${userName}`;
-  const cached = (await kv.get(key, "json")) as { name: string }[] | null;
-  if (cached) return cached;
-  const blogs = await client.following();
-  await kv.put(key, JSON.stringify(blogs), { expirationTtl: FOLLOWING_TTL });
-  return blogs;
+function kvStorage(kv: KVNamespace): Storage {
+  return {
+    getJSON: <T>(key: string) => kv.get(key, "json") as Promise<T | null>,
+    putJSON: (key, value, ttlSeconds) =>
+      kv.put(
+        key,
+        JSON.stringify(value),
+        ttlSeconds ? { expirationTtl: ttlSeconds } : undefined,
+      ),
+  };
 }
 
 export async function buildFeed(
   client: FeedClient,
   kv: KVNamespace,
   userName: string,
-  rng: Rng,
+  rng: () => number,
   now: number,
 ): Promise<FeedPost[]> {
-  const following = await cachedFollowing(client, kv, userName);
-  if (following.length === 0) return [];
-
-  const samples = Array.from(
-    { length: SAMPLES_PER_BATCH },
-    () => following[Math.floor(rng() * following.length)],
-  );
-
-  const results = await Promise.all(
-    samples.map(async (blog) => {
-      const boundKey = `oldest:${blog.name}`;
-      const notBefore =
-        ((await kv.get(boundKey, "json")) as number | null) ?? TUMBLR_EPOCH;
-      const before = sampleTimestamp(notBefore, now, rng);
-      try {
-        const posts = await client.posts(blog.name, before, POSTS_PER_SAMPLE);
-        if (posts.length === 0) {
-          // 「before 以前にポストは無い」と学習し、次回以降のサンプル範囲を狭める
-          await kv.put(boundKey, JSON.stringify(before));
-          return { ok: true, posts: [] as FeedPost[] };
-        }
-        return { ok: true, posts: posts.map(normalizePost) };
-      } catch (err) {
-        // TumblrRateLimitError は consumer key 全体の予算を使い切ったサインなので、
-        // 握りつぶさず buildFeed の呼び出し元まで伝播させて RateLimitGuard を
-        // trip させる(死んだ/非公開ブログなど他の失敗は単一サンプルの失敗として無視する)。
-        if (err instanceof TumblrRateLimitError) throw err;
-        return { ok: false, posts: [] as FeedPost[] };
-      }
-    }),
-  );
-
-  if (results.every((r) => !r.ok)) {
-    throw new Error("all feed samples failed");
-  }
-
-  return shuffle(
-    results.flatMap((r) => r.posts),
+  const raw = await sampleFeed({
+    client,
+    storage: kvStorage(kv),
+    userName,
     rng,
-  );
+    now,
+    samplesPerBatch: SAMPLES_PER_BATCH,
+    postsPerSample: POSTS_PER_SAMPLE,
+    followingTtl: FOLLOWING_TTL,
+    isFatal: (err) => err instanceof TumblrRateLimitError,
+  });
+  return raw.map(normalizePost);
 }
