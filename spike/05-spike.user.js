@@ -4,7 +4,7 @@
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
 // @grant        none
-// @version      0.4
+// @version      0.5
 // @description  Feasibility spike: can a document_start page-context hook intercept & rewrite the dashboard timeline response?
 // ==/UserScript==
 
@@ -19,6 +19,11 @@
 //   Stage 4(認証あり・変換して prepend・本命): localStorage.setItem('esSpikeStage','4') → リロード。
 //     donor を snake→camel 深変換してから先頭 prepend。変換後ポストがネイティブ描画
 //     されれば全経路成立。描画されたら1件リブログして成功確認(後で削除)。
+//   Stage 5(ライブ pagination ゲート): localStorage.setItem('esSpikeStage','5') → リロード。
+//     毎ページ「ランダムブログ×ランダム before=」で異なる donor を取得・camel 化し、
+//     elements を丸ごと置換。streamGlobalPosition を単調採番、_links.next は温存。
+//     スクロールし続けて (a) 毎回新しいポストが積まれるか (b) 無限ローディングに
+//     陥らないか (c) 同じポストの重複ループが起きないか を確認する。
 //   戻す: localStorage.removeItem('esSpikeStage')
 
 (() => {
@@ -50,6 +55,43 @@
 			status: 200,
 			headers: { 'Content-Type': 'application/json' },
 		});
+
+	// --- Stage 5 用: 年均等ランダムサンプリング ---
+	const TUMBLR_EPOCH_S = Date.UTC(2007, 0, 1) / 1000;
+	const rand = () => Math.random();
+	const sampleBefore = (now) => {
+		const startYear = 2007;
+		const endYear = new Date(now * 1000).getUTCFullYear();
+		const year = startYear + Math.floor(rand() * (endYear - startYear + 1));
+		const lo = Math.max(TUMBLR_EPOCH_S, Date.UTC(year, 0, 1) / 1000);
+		const hi = Math.min(now, Date.UTC(year + 1, 0, 1) / 1000 - 1);
+		return Math.floor(lo + rand() * (hi - lo));
+	};
+	let streamPos = 0; // 単調採番カウンタ(全ページ通し)
+
+	const fetchRandomDonor = async (h) => {
+		const fRes = await origFetch(
+			'https://www.tumblr.com/api/v2/user/following?limit=20',
+			{ headers: h },
+		);
+		const blogs = (await fRes.json())?.response?.blogs || [];
+		if (!blogs.length) return [];
+		const now = Math.floor(Date.now() / 1000);
+		const out = [];
+		for (let tries = 0; tries < 8 && out.length < 8; tries++) {
+			const blog = blogs[Math.floor(rand() * blogs.length)];
+			const before = sampleBefore(now);
+			const pRes = await origFetch(
+				`https://www.tumblr.com/api/v2/blog/${blog.name}/posts?npf=true&limit=3&before=${before}`,
+				{ headers: h },
+			);
+			const posts = (await pRes.json().catch(() => null))?.response?.posts || [];
+			out.push(...posts);
+		}
+		return out
+			.map(deepCamel)
+			.map((p) => ({ ...p, streamGlobalPosition: streamPos++ }));
+	};
 
 	const fetchDonorFromBlog = async (h, name) => {
 		for (const qs of ['npf=true&limit=10&before=1577836800', 'npf=true&limit=10']) {
@@ -105,12 +147,15 @@
 	window.fetch = async (input, init) => {
 		const url = typeof input === 'string' ? input : (input && input.url) || '';
 
-		if (STAGE >= 2 && !capturedAuth && url.includes('/api/v2/')) {
+		if (STAGE >= 2 && url.includes('/api/v2/')) {
 			const h =
 				input instanceof Request ? input.headers : new Headers(init && init.headers);
-			if (h.get('Authorization')) {
-				capturedAuth = h.get('Authorization');
-				log('auth captured (kept internal)');
+			const tok = h.get('Authorization');
+			// 毎回捕獲を更新(トークンローテーション対策)
+			if (tok && tok !== capturedAuth) {
+				const first = !capturedAuth;
+				capturedAuth = tok;
+				if (first) log('auth captured (kept internal)');
 			}
 		}
 
@@ -171,6 +216,17 @@
 				}
 				body.response.timeline.elements = [...inject, ...els];
 				log('stage', STAGE, ': prepended 3 donor posts to', els.length, 'real elements');
+				return jsonResponse(body);
+			}
+
+			if (STAGE === 5) {
+				const donor = await fetchRandomDonor({ Authorization: capturedAuth });
+				if (!donor.length) {
+					log('stage 5: donor empty — passthrough');
+					return res;
+				}
+				body.response.timeline.elements = donor; // _links は温存
+				log('stage 5: replaced with', donor.length, 'random posts, streamPos now', streamPos);
 				return jsonResponse(body);
 			}
 
