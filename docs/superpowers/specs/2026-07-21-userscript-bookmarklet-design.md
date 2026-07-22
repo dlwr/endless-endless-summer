@@ -50,6 +50,8 @@ esbuild で `.user.js`(Tampermonkey ヘッダー付き、`@run-at document_start
 
 フック内で何が起きても必ず素のレスポンスにフォールバックし、ダッシュボードを壊さないことを最優先とする。内部 API の形状変化でパースに失敗したら静かに置換をやめて console に警告を出す。
 
+**follow-up(ハードニング)**: 現状のフックは `buildElements`(内部 API での donor 取得)を無タイムアウトで await する。donor 取得が**例外**なら passthrough で素のダッシュボードに戻る(対応済み)が、**ハング**(応答の遅い/無反応なブログ)した場合はそのスクロールページのスピナーが止まらない懸念がある。`AbortController` + タイムアウトで一定時間内に donor が揃わなければ passthrough する処理を追加する。
+
 ## テスト
 
 - コアロジック: 既存の Vitest 資産を `packages/core/` へ移して維持。
