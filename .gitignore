@@ -3,3 +3,6 @@ dist/
 .dev.vars
 .wrangler/
 .superpowers/
+
+# 設計・spike・実装計画などの開発ドキュメント(公開しない・ローカル保持)
+docs/
