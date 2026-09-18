@@ -1,7 +1,7 @@
 import { type Rng, sampleTimestamp, TUMBLR_EPOCH } from "./sampling";
 
 export type RawPost = Record<string, unknown>;
-export type FollowingBlog = { name: string };
+export type FollowingBlog = { name: string; updated?: number };
 export type FeedClient = {
   following(): Promise<FollowingBlog[]>;
   posts(blogName: string, before: number, limit: number): Promise<RawPost[]>;
@@ -54,7 +54,9 @@ export async function sampleFeed(o: SampleFeedOptions): Promise<RawPost[]> {
       const boundKey = `oldest:${blog.name}`;
       const notBefore =
         (await o.storage.getJSON<number>(boundKey)) ?? TUMBLR_EPOCH;
-      const before = sampleTimestamp(notBefore, o.now, o.rng);
+      const newest = blog.updated ? blog.updated + 1 : o.now;
+      const upper = Math.max(notBefore, Math.min(o.now, newest));
+      const before = sampleTimestamp(notBefore, upper, o.rng);
       try {
         const posts = await o.client.posts(blog.name, before, o.postsPerSample);
         if (posts.length === 0) {

@@ -67,6 +67,54 @@ describe("sampleFeed", () => {
     expect(await storage.getJSON<number>("oldest:a")).toBeTypeOf("number");
   });
 
+  it("following の updated があれば before はそれを超えない", async () => {
+    const updated = Date.UTC(2015, 2, 8) / 1000;
+    const befores: number[] = [];
+    await sampleFeed({
+      client: {
+        following: async () => [{ name: "a", updated }],
+        posts: async (_blog, before) => {
+          befores.push(before);
+          return [{ id_string: "1" }];
+        },
+      },
+      storage: memStorage(),
+      userName: "me",
+      rng: seq([0.999, 0.999]),
+      now: Date.UTC(2026, 8, 18) / 1000,
+      samplesPerBatch: 1,
+      postsPerSample: 1,
+      followingTtl: 3600,
+    });
+    expect(befores[0]).toBeLessThanOrEqual(updated + 1);
+  });
+
+  it("updated が学習済み最古境界より前でも before は境界を下回らない", async () => {
+    const storage = memStorage();
+    const oldest = Date.UTC(2016, 0, 1) / 1000;
+    await storage.putJSON("oldest:a", oldest);
+    const befores: number[] = [];
+    await sampleFeed({
+      client: {
+        following: async () => [
+          { name: "a", updated: Date.UTC(2015, 0, 1) / 1000 },
+        ],
+        posts: async (_blog, before) => {
+          befores.push(before);
+          return [{ id_string: "1" }];
+        },
+      },
+      storage,
+      userName: "me",
+      rng: seq([0.5, 0.5]),
+      now: Date.UTC(2026, 8, 18) / 1000,
+      samplesPerBatch: 1,
+      postsPerSample: 1,
+      followingTtl: 3600,
+    });
+    expect(befores[0]).toBeGreaterThanOrEqual(oldest);
+  });
+
   it("isFatal に該当するエラーは即時 throw する", async () => {
     const fatal = new Error("rate limited");
     await expect(
