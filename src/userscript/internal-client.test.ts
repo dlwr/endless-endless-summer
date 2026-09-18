@@ -19,8 +19,8 @@ describe("createInternalClient", () => {
       fetchFn: mockFetch(following),
     });
     expect(await client.following()).toEqual([
-      { name: "alpha" },
-      { name: "beta" },
+      { name: "alpha", updated: 1425857114 },
+      { name: "beta", updated: 1700000000 },
     ]);
   });
 

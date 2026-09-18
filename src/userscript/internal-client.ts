@@ -44,7 +44,7 @@ export function createInternalClient(deps: {
         );
         for (const r of rest) pages.push(r.blogs);
       }
-      return pages.flat();
+      return pages.flat().map(({ name, updated }) => ({ name, updated }));
     },
     posts: async (
       blogName: string,

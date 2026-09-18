@@ -1,6 +1,9 @@
 {
   "response": {
     "total_blogs": 2,
-    "blogs": [{ "name": "alpha" }, { "name": "beta" }]
+    "blogs": [
+      { "name": "alpha", "updated": 1425857114 },
+      { "name": "beta", "updated": 1700000000 }
+    ]
   }
 }
