@@ -31,6 +31,7 @@ export function installHook(deps: {
   ) => Promise<Record<string, unknown>[] | null>;
   onAuth: (token: string) => void;
   pager: ReturnType<typeof createPager>;
+  timeoutMs: number;
 }): void {
   const orig = deps.win.fetch.bind(deps.win);
   deps.win.fetch = async (input: unknown, init?: unknown) => {
@@ -50,7 +51,14 @@ export function installHook(deps: {
 
     try {
       const body = (await res.clone().json()) as DashboardBody;
-      const elements = await deps.buildElements(body);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), deps.timeoutMs);
+      });
+      const elements = await Promise.race([
+        deps.buildElements(body),
+        timeout,
+      ]).finally(() => clearTimeout(timer));
       if (!elements || elements.length === 0) return res;
       const paged = deps.pager.buildPage(body, elements);
       return new Response(JSON.stringify(paged), {

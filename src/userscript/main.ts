@@ -50,6 +50,7 @@ function installToggleButton(
   let enabled = localStorage.getItem(ENABLED_KEY) !== "0"; // 既定 ON
   const storage = createStorage();
   const pager = createPager();
+  const seen = new Set<string>();
   const client = createInternalClient({
     getAuth: () => token,
     fetchFn: clientFetch,
@@ -65,6 +66,9 @@ function installToggleButton(
       samplesPerBatch: 6,
       postsPerSample: 3,
       followingTtl: 3600,
+      seen,
+      minPosts: 6,
+      maxRounds: 3,
     });
     if (raw.length === 0) return null;
     return raw.map((p) => deepCamel<Record<string, unknown>>(p));
@@ -78,6 +82,7 @@ function installToggleButton(
       token = t;
     },
     pager,
+    timeoutMs: 15_000,
   });
 
   installToggleButton(
