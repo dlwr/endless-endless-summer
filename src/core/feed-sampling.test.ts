@@ -137,3 +137,88 @@ describe("sampleFeed", () => {
     ).rejects.toBe(fatal);
   });
 });
+
+describe("sampleFeed の重複排除", () => {
+  const base = {
+    userName: "me",
+    rng: seq([0.1, 0.5, 0.9]),
+    now: 1_700_000_000,
+    postsPerSample: 2,
+    followingTtl: 3600,
+  };
+
+  it("seen に含まれる id_string のポストを除外する", async () => {
+    const got = await sampleFeed({
+      ...base,
+      storage: memStorage(),
+      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      samplesPerBatch: 1,
+      seen: new Set(["1"]),
+    });
+    expect(got.map((p) => p.id_string)).toEqual(["2"]);
+  });
+
+  it("同じバッチ内で重複したポストは1件にまとめる", async () => {
+    const got = await sampleFeed({
+      ...base,
+      storage: memStorage(),
+      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      samplesPerBatch: 3,
+      seen: new Set(),
+      maxRounds: 1,
+    });
+    expect(got.map((p) => p.id_string).sort()).toEqual(["1", "2"]);
+  });
+
+  it("返したポストを seen に登録する", async () => {
+    const seen = new Set<string>();
+    await sampleFeed({
+      ...base,
+      storage: memStorage(),
+      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      samplesPerBatch: 1,
+      seen,
+    });
+    expect([...seen].sort()).toEqual(["1", "2"]);
+  });
+
+  it("新規ポストが minPosts に届くまで再サンプルする", async () => {
+    let n = 0;
+    const got = await sampleFeed({
+      ...base,
+      storage: memStorage(),
+      client: {
+        following: async () => [{ name: "a" }],
+        posts: async () => {
+          n++;
+          return n === 1 ? [{ id_string: "old" }] : [{ id_string: `new${n}` }];
+        },
+      },
+      samplesPerBatch: 1,
+      seen: new Set(["old"]),
+      minPosts: 1,
+      maxRounds: 3,
+    });
+    expect(got.map((p) => p.id_string)).toEqual(["new2"]);
+  });
+
+  it("再サンプルは maxRounds で打ち切る", async () => {
+    let calls = 0;
+    await sampleFeed({
+      ...base,
+      storage: memStorage(),
+      client: {
+        following: async () => [{ name: "a" }],
+        posts: async () => {
+          calls++;
+          return [{ id_string: "old" }];
+        },
+      },
+      samplesPerBatch: 1,
+      seen: new Set(["old"]),
+      minPosts: 1,
+      maxRounds: 3,
+    });
+    expect(calls).toBe(3);
+  });
+});

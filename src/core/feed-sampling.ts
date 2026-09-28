@@ -20,6 +20,9 @@ export type SampleFeedOptions = {
   postsPerSample: number;
   followingTtl: number;
   isFatal?: (err: unknown) => boolean;
+  seen?: Set<string>;
+  minPosts?: number;
+  maxRounds?: number;
 };
 
 function shuffle<T>(items: T[], rng: Rng): T[] {
@@ -40,10 +43,10 @@ async function cachedFollowing(o: SampleFeedOptions): Promise<FollowingBlog[]> {
   return blogs;
 }
 
-export async function sampleFeed(o: SampleFeedOptions): Promise<RawPost[]> {
-  const following = await cachedFollowing(o);
-  if (following.length === 0) return [];
-
+async function sampleRound(
+  o: SampleFeedOptions,
+  following: FollowingBlog[],
+): Promise<RawPost[]> {
   const samples = Array.from(
     { length: o.samplesPerBatch },
     () => following[Math.floor(o.rng() * following.length)],
@@ -72,8 +75,30 @@ export async function sampleFeed(o: SampleFeedOptions): Promise<RawPost[]> {
   );
 
   if (results.every((r) => !r.ok)) throw new Error("all feed samples failed");
-  return shuffle(
-    results.flatMap((r) => r.posts),
-    o.rng,
-  );
+  return results.flatMap((r) => r.posts);
+}
+
+export async function sampleFeed(o: SampleFeedOptions): Promise<RawPost[]> {
+  const following = await cachedFollowing(o);
+  if (following.length === 0) return [];
+
+  const seen = o.seen ?? new Set<string>();
+  const minPosts = o.minPosts ?? 1;
+  const maxRounds = o.maxRounds ?? 1;
+  const collected: RawPost[] = [];
+  for (
+    let round = 0;
+    round < maxRounds && collected.length < minPosts;
+    round++
+  ) {
+    for (const post of await sampleRound(o, following)) {
+      const id = post.id_string;
+      if (typeof id === "string") {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      collected.push(post);
+    }
+  }
+  return shuffle(collected, o.rng);
 }
