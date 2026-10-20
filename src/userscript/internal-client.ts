@@ -26,24 +26,27 @@ export function createInternalClient(deps: {
 
   return {
     following: async (): Promise<FollowingBlog[]> => {
-      const limit = 20;
-      const maxPages = 50;
-      const first = await get<{ total_blogs: number; blogs: FollowingBlog[] }>(
-        `/user/following?limit=${limit}&offset=0`,
-      );
-      const pages: FollowingBlog[][] = [first.blogs];
-      const remaining = first.total_blogs - first.blogs.length;
-      if (first.blogs.length > 0 && remaining > 0) {
-        const extra = Math.min(Math.ceil(remaining / limit), maxPages - 1);
-        const rest = await Promise.all(
-          Array.from({ length: extra }, (_, i) =>
-            get<{ blogs: FollowingBlog[] }>(
-              `/user/following?limit=${limit}&offset=${(i + 1) * limit}`,
-            ),
-          ),
-        );
-        for (const r of rest) pages.push(r.blogs);
+      const limit = 100;
+      const concurrency = 4;
+      type Page = { total_blogs: number; blogs: FollowingBlog[] };
+      const page = (offset: number) =>
+        get<Page>(`/user/following?limit=${limit}&offset=${offset}`);
+      const first = await page(0);
+      const offsets: number[] = [];
+      for (let off = limit; off < first.total_blogs; off += limit) {
+        offsets.push(off);
       }
+      const pages: FollowingBlog[][] = [first.blogs];
+      const worker = async () => {
+        for (
+          let off = offsets.shift();
+          off !== undefined;
+          off = offsets.shift()
+        ) {
+          pages[off / limit] = (await page(off)).blogs;
+        }
+      };
+      await Promise.all(Array.from({ length: concurrency }, worker));
       return pages.flat().map(({ name, updated }) => ({ name, updated }));
     },
     posts: async (
