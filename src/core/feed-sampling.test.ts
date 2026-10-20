@@ -40,7 +40,7 @@ describe("sampleFeed", () => {
 
   it("取得した生ポストを(正規化せず)返す", async () => {
     const got = await sampleFeed({
-      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      client: client([{ idString: "1" }, { idString: "2" }]),
       storage: memStorage(),
       userName: "me",
       rng: seq([0.1, 0.2, 0.3]),
@@ -49,7 +49,7 @@ describe("sampleFeed", () => {
       postsPerSample: 2,
       followingTtl: 3600,
     });
-    expect(got.map((p) => p.id_string).sort()).toEqual(["1", "2"]);
+    expect(got.map((p) => p.idString).sort()).toEqual(["1", "2"]);
   });
 
   it("posts が空なら最古境界を storage に学習する", async () => {
@@ -75,7 +75,7 @@ describe("sampleFeed", () => {
         following: async () => [{ name: "a", updated }],
         posts: async (_blog, before) => {
           befores.push(before);
-          return [{ id_string: "1" }];
+          return [{ idString: "1" }];
         },
       },
       storage: memStorage(),
@@ -101,7 +101,7 @@ describe("sampleFeed", () => {
         ],
         posts: async (_blog, before) => {
           befores.push(before);
-          return [{ id_string: "1" }];
+          return [{ idString: "1" }];
         },
       },
       storage,
@@ -147,27 +147,27 @@ describe("sampleFeed の重複排除", () => {
     followingTtl: 3600,
   };
 
-  it("seen に含まれる id_string のポストを除外する", async () => {
+  it("seen に含まれる idString のポストを除外する", async () => {
     const got = await sampleFeed({
       ...base,
       storage: memStorage(),
-      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      client: client([{ idString: "1" }, { idString: "2" }]),
       samplesPerBatch: 1,
       seen: new Set(["1"]),
     });
-    expect(got.map((p) => p.id_string)).toEqual(["2"]);
+    expect(got.map((p) => p.idString)).toEqual(["2"]);
   });
 
   it("同じバッチ内で重複したポストは1件にまとめる", async () => {
     const got = await sampleFeed({
       ...base,
       storage: memStorage(),
-      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      client: client([{ idString: "1" }, { idString: "2" }]),
       samplesPerBatch: 3,
       seen: new Set(),
       maxRounds: 1,
     });
-    expect(got.map((p) => p.id_string).sort()).toEqual(["1", "2"]);
+    expect(got.map((p) => p.idString).sort()).toEqual(["1", "2"]);
   });
 
   it("返したポストを seen に登録する", async () => {
@@ -175,7 +175,7 @@ describe("sampleFeed の重複排除", () => {
     await sampleFeed({
       ...base,
       storage: memStorage(),
-      client: client([{ id_string: "1" }, { id_string: "2" }]),
+      client: client([{ idString: "1" }, { idString: "2" }]),
       samplesPerBatch: 1,
       seen,
     });
@@ -191,7 +191,7 @@ describe("sampleFeed の重複排除", () => {
         following: async () => [{ name: "a" }],
         posts: async () => {
           n++;
-          return n === 1 ? [{ id_string: "old" }] : [{ id_string: `new${n}` }];
+          return n === 1 ? [{ idString: "old" }] : [{ idString: `new${n}` }];
         },
       },
       samplesPerBatch: 1,
@@ -199,7 +199,7 @@ describe("sampleFeed の重複排除", () => {
       minPosts: 1,
       maxRounds: 3,
     });
-    expect(got.map((p) => p.id_string)).toEqual(["new2"]);
+    expect(got.map((p) => p.idString)).toEqual(["new2"]);
   });
 
   it("再サンプルは maxRounds で打ち切る", async () => {
@@ -211,7 +211,7 @@ describe("sampleFeed の重複排除", () => {
         following: async () => [{ name: "a" }],
         posts: async () => {
           calls++;
-          return [{ id_string: "old" }];
+          return [{ idString: "old" }];
         },
       },
       samplesPerBatch: 1,
