@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDashboardPath } from "./route";
+import { isDashboardPath, isFollowingPath } from "./route";
 
 describe("isDashboardPath", () => {
   it("/dashboard は true", () => {
@@ -16,5 +16,19 @@ describe("isDashboardPath", () => {
 
   it("/dashboards のような前方一致だけのパスは false", () => {
     expect(isDashboardPath("/dashboards")).toBe(false);
+  });
+});
+
+describe("isFollowingPath", () => {
+  it("/following は true", () => {
+    expect(isFollowingPath("/following")).toBe(true);
+  });
+
+  it("/dashboard/following は false", () => {
+    expect(isFollowingPath("/dashboard/following")).toBe(false);
+  });
+
+  it("/followings のような前方一致だけのパスは false", () => {
+    expect(isFollowingPath("/followings")).toBe(false);
   });
 });

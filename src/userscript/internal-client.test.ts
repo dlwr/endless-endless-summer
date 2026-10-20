@@ -24,6 +24,44 @@ describe("createInternalClient", () => {
     ]);
   });
 
+  it("1000件を超えるフォローも全ページ取得する", async () => {
+    const total = 2500;
+    const fetchFn = vi.fn<FetchLike>(async (url) => {
+      const u = new URL(url);
+      const offset = Number(u.searchParams.get("offset"));
+      const limit = Number(u.searchParams.get("limit"));
+      const n = Math.max(0, Math.min(limit, total - offset));
+      return jsonRes({
+        response: {
+          total_blogs: total,
+          blogs: Array.from({ length: n }, (_, i) => ({
+            name: `b${offset + i}`,
+            updated: 1,
+          })),
+        },
+      });
+    });
+    const client = createInternalClient({ getAuth: () => "tok", fetchFn });
+    expect((await client.following()).length).toBe(total);
+  });
+
+  it("following を同時に4本までしか取得しない", async () => {
+    let running = 0;
+    let peak = 0;
+    const fetchFn = vi.fn<FetchLike>(async () => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 1));
+      running--;
+      return jsonRes({
+        response: { total_blogs: 2000, blogs: [{ name: "x", updated: 1 }] },
+      });
+    });
+    const client = createInternalClient({ getAuth: () => "tok", fetchFn });
+    await client.following();
+    expect(peak).toBe(4);
+  });
+
   it("posts を before/limit 付きで取得する", async () => {
     const fetchFn = mockFetch(posts);
     const client = createInternalClient({ getAuth: () => "tok", fetchFn });
