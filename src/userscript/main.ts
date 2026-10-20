@@ -2,6 +2,7 @@ import { sampleFeed } from "../core/feed-sampling";
 import { deepCamel } from "../core/transform";
 import { type HookedFetch, installHook } from "./hook";
 import { createInternalClient, type FetchLike } from "./internal-client";
+import { isDashboardPath, onRouteChange } from "./route";
 import { createStorage } from "./storage";
 import { createPager } from "./timeline-page";
 
@@ -32,10 +33,15 @@ function installToggleButton(
     btn.blur();
   });
   render();
+  const sync = () => {
+    btn.style.display = isDashboardPath(location.pathname) ? "" : "none";
+  };
   const mount = () => {
     if (document.body) document.body.appendChild(btn);
     else requestAnimationFrame(mount);
   };
+  sync();
+  onRouteChange(sync);
   mount();
 }
 
