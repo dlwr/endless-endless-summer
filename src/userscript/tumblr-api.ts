@@ -153,3 +153,8 @@ export function createFeedClient(api: TumblrApi): FeedClient {
     posts: api.posts,
   };
 }
+
+// Tumblr 本体の初期化後に生えるので、document_start 時点では未定義。
+export function findApiFetch(win: object): ApiFetch | undefined {
+  return (win as { tumblr?: { apiFetch?: ApiFetch } }).tumblr?.apiFetch;
+}

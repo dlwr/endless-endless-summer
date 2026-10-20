@@ -4,6 +4,7 @@ import {
   type ApiFetch,
   createFeedClient,
   createTumblrApi,
+  findApiFetch,
 } from "./tumblr-api";
 
 const apiError = (status: number) =>
@@ -165,5 +166,16 @@ describe("createFeedClient", () => {
     expect(await client.following()).toEqual([
       { name: "a", updated: 1_700_000_000 },
     ]);
+  });
+});
+
+describe("findApiFetch", () => {
+  it("window.tumblr.apiFetch を返す", () => {
+    const apiFetch: ApiFetch = async () => ({});
+    expect(findApiFetch({ tumblr: { apiFetch } })).toBe(apiFetch);
+  });
+
+  it("window.tumblr が未定義なら undefined", () => {
+    expect(findApiFetch({})).toBeUndefined();
   });
 });
