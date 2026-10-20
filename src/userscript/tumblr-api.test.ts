@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { RateLimitedError } from "../core/oldest";
-import { type ApiFetch, createTumblrApi } from "./tumblr-api";
+import {
+  type ApiFetch,
+  createFeedClient,
+  createTumblrApi,
+} from "./tumblr-api";
 
 const apiError = (status: number) =>
   Object.assign(new Error(`api ${status}`), { status });
@@ -132,5 +136,34 @@ describe("createTumblrApi.unfollow / follow", () => {
     });
     const api = createTumblrApi({ apiFetch, now: () => 0 });
     await expect(api.unfollow("u")).rejects.toBeInstanceOf(RateLimitedError);
+  });
+});
+
+describe("createTumblrApi.posts", () => {
+  it("npf と before/limit 付きで blog posts を呼ぶ", async () => {
+    const apiFetch = vi.fn<ApiFetch>(async () => ({ response: { posts: [] } }));
+    await createTumblrApi({ apiFetch, now: () => 0 }).posts("a b", 1234, 3);
+    expect(apiFetch).toHaveBeenCalledWith("/v2/blog/a%20b/posts", {
+      queryParams: { npf: "true", before: 1234, limit: 3 },
+    });
+  });
+
+  it("response.posts をそのまま返す", async () => {
+    const posts = [{ idString: "1" }, { idString: "2" }];
+    const apiFetch = vi.fn<ApiFetch>(async () => ({ response: { posts } }));
+    const api = createTumblrApi({ apiFetch, now: () => 0 });
+    expect(await api.posts("a", 1, 2)).toEqual(posts);
+  });
+});
+
+describe("createFeedClient", () => {
+  it("following は name と updated だけに絞る", async () => {
+    const apiFetch = vi.fn<ApiFetch>(async () => followingPage(["a"]));
+    const client = createFeedClient(
+      createTumblrApi({ apiFetch, now: () => 0 }),
+    );
+    expect(await client.following()).toEqual([
+      { name: "a", updated: 1_700_000_000 },
+    ]);
   });
 });
