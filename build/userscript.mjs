@@ -6,7 +6,8 @@ const banner = `// ==UserScript==
 // @match        https://www.tumblr.com/*
 // @run-at       document-start
 // @grant        none
-// @version      1.1.0
+// @noframes
+// @version      1.1.1
 // @description  Tumblr dashboard を年均等ランダムな過去ポストに置き換える。フォロー整理つき
 // @homepageURL  https://github.com/dlwr/endless-endless-summer
 // @supportURL   https://github.com/dlwr/endless-endless-summer/issues
