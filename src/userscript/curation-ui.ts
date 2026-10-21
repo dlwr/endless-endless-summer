@@ -54,6 +54,7 @@ type State = {
   view: "following" | "history";
   status: string;
   busy: boolean;
+  filling: boolean;
   shown: number;
 };
 
@@ -84,6 +85,7 @@ export function openCuration(deps: {
     view: "following",
     status: "フォロー一覧を取得中…",
     busy: true,
+    filling: false,
     shown: PAGE_ROWS,
   };
   let closed = false;
@@ -110,7 +112,7 @@ export function openCuration(deps: {
     );
     unfollowBtn.disabled = state.busy || state.selected.size === 0;
     const fetchBtn = button("最古ポスト日を取得", () => void runFill());
-    fetchBtn.disabled = state.busy;
+    fetchBtn.disabled = state.busy || state.filling;
     const viewBtn = button(
       state.view === "following" ? "外した履歴" : "フォロー一覧へ",
       () => {
@@ -257,7 +259,7 @@ export function openCuration(deps: {
   };
 
   const runFill = async () => {
-    state.busy = true;
+    state.filling = true;
     const byName = new Map(state.blogs.map((b) => [b.name, b]));
     const total = state.blogs.length;
     let done = state.blogs.filter((b) => b.oldest).length;
@@ -279,7 +281,7 @@ export function openCuration(deps: {
       const b = byName.get(name);
       if (b) b.oldest = oldest;
     }
-    state.busy = false;
+    state.filling = false;
     const missing = state.blogs.filter((b) => !b.oldest).length;
     state.status = result.rateLimited
       ? `レート制限で中断しました。未取得 ${missing} 件。時間をおいて再取得してください`
