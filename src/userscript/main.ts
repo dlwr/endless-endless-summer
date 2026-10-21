@@ -1,12 +1,10 @@
 import { sampleFeed } from "../core/feed-sampling";
-import { deepCamel } from "../core/transform";
 import { openCuration } from "./curation-ui";
 import { type HookedFetch, installHook } from "./hook";
-import { createInternalClient, type FetchLike } from "./internal-client";
 import { isDashboardPath, isFollowingPath, onRouteChange } from "./route";
 import { createStorage } from "./storage";
 import { createPager } from "./timeline-page";
-import { type ApiFetch, createTumblrApi } from "./tumblr-api";
+import { createFeedClient, createTumblrApi, findApiFetch } from "./tumblr-api";
 
 const ENABLED_KEY = "ees:enabled";
 
@@ -42,8 +40,7 @@ function installCurationButton(
   btn.textContent = "フォロー整理";
   btn.addEventListener("click", () => {
     btn.blur();
-    const apiFetch = (window as unknown as { tumblr?: { apiFetch?: ApiFetch } })
-      .tumblr?.apiFetch;
+    const apiFetch = findApiFetch(window);
     if (!apiFetch) {
       console.warn("[ees] window.tumblr.apiFetch is unavailable");
       return;
@@ -78,24 +75,18 @@ function installToggleButton(
 
 (() => {
   const w = window as unknown as { fetch: HookedFetch };
-  // フック設置前の生 fetch を確保(donor 取得はこれを使い、再介入を避ける)
-  const origFetch = w.fetch.bind(w);
-  const clientFetch: FetchLike = (url, init) =>
-    origFetch(url, init) as unknown as ReturnType<FetchLike>;
-
-  let token: string | null = null;
   let enabled = localStorage.getItem(ENABLED_KEY) !== "0"; // 既定 ON
   const storage = createStorage();
   const pager = createPager();
   const seen = new Set<string>();
-  const client = createInternalClient({
-    getAuth: () => token,
-    fetchFn: clientFetch,
-  });
 
   const buildElements = async (): Promise<Record<string, unknown>[] | null> => {
-    const raw = await sampleFeed({
-      client,
+    const apiFetch = findApiFetch(window);
+    if (!apiFetch) return null;
+    const posts = await sampleFeed({
+      client: createFeedClient(
+        createTumblrApi({ apiFetch, now: () => Math.floor(Date.now() / 1000) }),
+      ),
       storage,
       userName: "me",
       rng: Math.random,
@@ -107,17 +98,13 @@ function installToggleButton(
       minPosts: 6,
       maxRounds: 3,
     });
-    if (raw.length === 0) return null;
-    return raw.map((p) => deepCamel<Record<string, unknown>>(p));
+    return posts.length === 0 ? null : posts;
   };
 
   installHook({
     win: w,
     getEnabled: () => enabled,
     buildElements,
-    onAuth: (t) => {
-      token = t;
-    },
     pager,
     timeoutMs: 15_000,
   });

@@ -1,31 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  extractAuth,
-  type HookedFetch,
-  installHook,
-  isDashboardUrl,
-} from "./hook";
+import { type HookedFetch, installHook, isDashboardUrl } from "./hook";
 import { createPager } from "./timeline-page";
-
-describe("extractAuth", () => {
-  it("init.headers の Authorization を返す", () => {
-    expect(
-      extractAuth("/api/v2/x", { headers: { Authorization: "Bearer z" } }),
-    ).toBe("Bearer z");
-  });
-
-  it("Request オブジェクトのヘッダーからも取れる", () => {
-    const req = new Request("https://www.tumblr.com/api/v2/x", {
-      headers: { Authorization: "Bearer q" },
-    });
-    expect(extractAuth(req)).toBe("Bearer q");
-  });
-
-  it("Authorization が無ければ null", () => {
-    expect(extractAuth("/api/v2/x", {})).toBeNull();
-  });
-});
 
 describe("isDashboardUrl", () => {
   it("dashboard タイムラインを判定する", () => {
@@ -49,7 +25,6 @@ function setup(buildElements: () => Promise<Record<string, unknown>[] | null>) {
     win,
     getEnabled: () => true,
     buildElements,
-    onAuth: () => {},
     pager: createPager(),
     timeoutMs: 1000,
   });
@@ -74,5 +49,11 @@ describe("installHook", () => {
     const win = setup(async () => [{ id: "sampled" }]);
     const body = await (await win.fetch(DASHBOARD)).json();
     expect(body.response.timeline.elements[0].id).toBe("sampled");
+  });
+
+  it("buildElements が null なら元のレスポンスを返す", async () => {
+    const win = setup(async () => null);
+    const body = await (await win.fetch(DASHBOARD)).json();
+    expect(body).toEqual(originalBody);
   });
 });

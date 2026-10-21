@@ -46,7 +46,7 @@ tumblr.com のダッシュボードを、フォロー中ブログの過去ポス
 
 ## プライバシー
 
-セッションの Bearer トークンはブラウザのメモリ内でのみ使用し、保存・外部送信・ログ出力しない。フォロー整理は Tumblr が拡張向けに公開している `window.tumblr.apiFetch` を使う。内部 API 呼び出しはすべてユーザー自身の tumblr.com セッションで行う。
+API 呼び出しはすべて Tumblr が拡張向けに公開している `window.tumblr.apiFetch` 経由で、ユーザー自身の tumblr.com セッションで行う。認証情報には触れない。
 
 ## 開発
 
@@ -61,8 +61,8 @@ TypeScript / Vitest / esbuild / Biome / pnpm。
 
 ## 構成
 
-- `src/core/` — フレームワーク非依存の共有ロジック(年均等サンプリング、フィード構築、snake→camel 変換)
-- `src/userscript/` — ユーザースクリプト(fetch フック、内部 API クライアント、ページング封筒、ストレージ、トグル、キーマップ)
+- `src/core/` — フレームワーク非依存の共有ロジック(年均等サンプリング、フィード構築、フォロー整理)
+- `src/userscript/` — ユーザースクリプト(fetch フック、apiFetch クライアント、ページング封筒、ストレージ、トグル、キーマップ)
 - `build/userscript.mjs` — esbuild で Tampermonkey ヘッダー付き `.user.js` を生成
 - `docs/superpowers/` — 設計・spike レポート・実装計画
 

@@ -1,4 +1,5 @@
 import type { CurationBlog, Oldest } from "../core/curation";
+import type { FeedClient, RawPost } from "../core/feed-sampling";
 import { RateLimitedError } from "../core/oldest";
 
 // window.tumblr.apiFetch: Tumblr が拡張向けに公開している、ログイン中ユーザーの
@@ -114,6 +115,19 @@ export function createTumblrApi(deps: {
       }
     },
 
+    posts: async (
+      name: string,
+      before: number,
+      limit: number,
+    ): Promise<RawPost[]> => {
+      const res = await call<{ response: { posts: RawPost[] } }>(
+        deps.apiFetch,
+        `/v2/blog/${encodeURIComponent(name)}/posts`,
+        { queryParams: { npf: "true", before, limit } },
+      );
+      return res.response.posts;
+    },
+
     unfollow: async (url: string): Promise<void> => {
       await call(deps.apiFetch, "/v2/user/unfollow", {
         method: "POST",
@@ -131,3 +145,16 @@ export function createTumblrApi(deps: {
 }
 
 export type TumblrApi = ReturnType<typeof createTumblrApi>;
+
+export function createFeedClient(api: TumblrApi): FeedClient {
+  return {
+    following: async () =>
+      (await api.following()).map(({ name, updated }) => ({ name, updated })),
+    posts: api.posts,
+  };
+}
+
+// Tumblr 本体の初期化後に生えるので、document_start 時点では未定義。
+export function findApiFetch(win: object): ApiFetch | undefined {
+  return (win as { tumblr?: { apiFetch?: ApiFetch } }).tumblr?.apiFetch;
+}

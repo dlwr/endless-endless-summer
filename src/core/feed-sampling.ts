@@ -92,7 +92,7 @@ export async function sampleFeed(o: SampleFeedOptions): Promise<RawPost[]> {
     round++
   ) {
     for (const post of await sampleRound(o, following)) {
-      const id = post.id_string;
+      const id = post.idString;
       if (typeof id === "string") {
         if (seen.has(id)) continue;
         seen.add(id);
