@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CurationBlog, sortCandidates } from "./curation";
+import { type CurationBlog, filterBlogs, sortCandidates } from "./curation";
 
 const blog = (
   name: string,
@@ -87,5 +87,124 @@ describe("sortCandidates", () => {
     ];
     sortCandidates(input, new Set());
     expect(names(input)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("sortCandidates の並び替え指定", () => {
+  const found = (ts: number) => ({ kind: "found", ts }) as const;
+
+  it("最古ポスト日の昇順では古い順に並べ、ポストなしをその後ろに置く", () => {
+    const got = sortCandidates(
+      [
+        blog("new", found(1_577_836_800)),
+        blog("empty", { kind: "empty" }),
+        blog("old", found(1_262_304_000)),
+      ],
+      new Set(),
+      { key: "oldest", dir: "asc" },
+    );
+    expect(names(got)).toEqual(["old", "new", "empty"]);
+  });
+
+  it("最古ポスト日の昇順でも未取得は最後に置く", () => {
+    const got = sortCandidates(
+      [
+        blog("unknown", undefined),
+        blog("new", found(1_577_836_800)),
+        blog("old", found(1_262_304_000)),
+      ],
+      new Set(),
+      { key: "oldest", dir: "asc" },
+    );
+    expect(names(got)).toEqual(["old", "new", "unknown"]);
+  });
+
+  it("ポスト数の降順に並べる", () => {
+    const got = sortCandidates(
+      [
+        blog("few", undefined, { posts: 10 }),
+        blog("many", undefined, { posts: 900 }),
+        blog("mid", undefined, { posts: 50 }),
+      ],
+      new Set(),
+      { key: "posts", dir: "desc" },
+    );
+    expect(names(got)).toEqual(["many", "mid", "few"]);
+  });
+
+  it("最終ポスト日の昇順に並べる", () => {
+    const got = sortCandidates(
+      [
+        blog("mid", undefined, { updated: 200 }),
+        blog("new", undefined, { updated: 300 }),
+        blog("old", undefined, { updated: 100 }),
+      ],
+      new Set(),
+      { key: "updated", dir: "asc" },
+    );
+    expect(names(got)).toEqual(["old", "mid", "new"]);
+  });
+
+  it("フォロー日の降順に並べる", () => {
+    const got = sortCandidates(
+      [
+        blog("mid", undefined, { followedAt: 200 }),
+        blog("old", undefined, { followedAt: 100 }),
+        blog("new", undefined, { followedAt: 300 }),
+      ],
+      new Set(),
+      { key: "followedAt", dir: "desc" },
+    );
+    expect(names(got)).toEqual(["new", "mid", "old"]);
+  });
+
+  it("ブログ名の昇順に並べる", () => {
+    const got = sortCandidates(
+      [
+        blog("charlie", undefined),
+        blog("alpha", undefined),
+        blog("bravo", undefined),
+      ],
+      new Set(),
+      { key: "name", dir: "asc" },
+    );
+    expect(names(got)).toEqual(["alpha", "bravo", "charlie"]);
+  });
+
+  it("どの並び替えでも保護したブログは最後尾に沈める", () => {
+    const got = sortCandidates(
+      [
+        blog("many-protected", undefined, { posts: 900 }),
+        blog("few", undefined, { posts: 10 }),
+        blog("mid", undefined, { posts: 50 }),
+      ],
+      new Set(["many-protected"]),
+      { key: "posts", dir: "desc" },
+    );
+    expect(names(got)).toEqual(["mid", "few", "many-protected"]);
+  });
+});
+
+describe("filterBlogs", () => {
+  const blogs = [
+    blog("summer-photo", undefined, { title: "夏の写真" }),
+    blog("noise-tape", undefined, { title: "Tape Archive" }),
+    blog("kyoto", undefined, { title: "京都の夏" }),
+  ];
+
+  it("ブログ名の部分一致で絞り込む", () => {
+    expect(names(filterBlogs(blogs, "photo"))).toEqual(["summer-photo"]);
+  });
+
+  it("タイトルを大文字小文字を区別せずに絞り込む", () => {
+    expect(names(filterBlogs(blogs, "archive"))).toEqual(["noise-tape"]);
+  });
+
+  it("日本語のタイトルでも絞り込む", () => {
+    expect(names(filterBlogs(blogs, "夏"))).toEqual(["summer-photo", "kyoto"]);
+  });
+
+  it("空白だけの検索語なら全件を返す", () => {
+    expect(filterBlogs(blogs, "  ")).toHaveLength(3);
   });
 });

@@ -1,6 +1,9 @@
 import {
   type CurationBlog,
+  filterBlogs,
   type Oldest,
+  type SortKey,
+  type SortOrder,
   sortCandidates,
 } from "../core/curation";
 import type { FollowingBlog, Storage } from "../core/feed-sampling";
@@ -26,25 +29,49 @@ export function formatOldest(oldest: Oldest | undefined): string {
 }
 
 const CSS = `
-.ees-cur{position:fixed;inset:0;z-index:100000;background:#001935;color:#fff;
+.ees-cur{position:fixed;inset:0;z-index:100000;background:#001935;color:#e8eef5;
   font:13px/1.4 system-ui,sans-serif;display:flex;flex-direction:column}
-.ees-cur header{display:flex;gap:8px;align-items:center;padding:10px 16px;
-  border-bottom:1px solid #35465c;flex-wrap:wrap}
+.ees-cur header,.ees-cur .toolbar{display:flex;gap:8px;align-items:center;
+  padding:10px 16px;flex-wrap:wrap}
+.ees-cur header{border-bottom:1px solid #35465c}
+.ees-cur .toolbar{padding:8px 16px;background:#06213d;border-bottom:1px solid #1f3550}
 .ees-cur header h2{font-size:15px;margin:0 12px 0 0}
 .ees-cur .status{flex:1;color:#b8c3cf;min-width:200px}
 .ees-cur button{background:#1f3550;color:#fff;border:1px solid #35465c;
   border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer}
+.ees-cur button:hover:not(:disabled){background:#2a4566}
 .ees-cur button:disabled{opacity:.5;cursor:default}
-.ees-cur button.danger{background:#7a2230;border-color:#a33a4a}
+.ees-cur button.danger{background:#a33a4a;border-color:#c2566a}
+.ees-cur button.danger:hover:not(:disabled){background:#bb4558}
+.ees-cur button.ghost{background:none;border-color:transparent;color:#7f8fa3;padding:2px 8px}
+.ees-cur button.ghost:hover{color:#fff;border-color:#35465c;background:none}
+.ees-cur tr.protected button.ghost{color:#f2c94c}
+.ees-cur input[type=search]{background:#0b2440;color:#fff;border:1px solid #35465c;
+  border-radius:6px;padding:5px 10px;font:inherit;width:240px}
+.ees-cur input[type=search]:focus{outline:2px solid #8ec5ff;outline-offset:-1px}
+.ees-cur input[type=checkbox]{width:15px;height:15px;margin:0;cursor:pointer;accent-color:#e05a6d}
+.ees-cur .count{color:#b8c3cf}
 .ees-cur .body{flex:1;overflow:auto}
 .ees-cur table{border-collapse:collapse;width:100%}
-.ees-cur th,.ees-cur td{padding:4px 10px;border-bottom:1px solid #1f3550;
+.ees-cur th,.ees-cur td{padding:6px 10px;border-bottom:1px solid #1f3550;
   text-align:left;white-space:nowrap}
-.ees-cur th{position:sticky;top:0;background:#0b2440;font-weight:600}
-.ees-cur td.num{text-align:right}
+.ees-cur th{position:sticky;top:0;z-index:1;background:#0b2440;font-weight:600;color:#b8c3cf;user-select:none}
+.ees-cur th.sortable{cursor:pointer}
+.ees-cur th.sortable:hover{color:#fff}
+.ees-cur th.sorted{color:#fff}
+.ees-cur th.num,.ees-cur td.num{text-align:right}
+.ees-cur td.num,.ees-cur td.date{font-variant-numeric:tabular-nums}
+.ees-cur tbody tr{cursor:pointer}
+.ees-cur tbody tr:hover td{background:#0b2a4a}
+.ees-cur tbody tr.selected td{background:#3a1f33}
+.ees-cur tbody tr.selected:hover td{background:#4a2640}
+.ees-cur tr.protected{cursor:default}
 .ees-cur tr.protected td{color:#7f8fa3}
+.ees-cur td.muted{color:#5f7189}
 .ees-cur a{color:#8ec5ff;text-decoration:none}
-.ees-cur .title{color:#b8c3cf;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.ees-cur a:hover{text-decoration:underline}
+.ees-cur .title{color:#b8c3cf;max-width:360px;overflow:hidden;text-overflow:ellipsis;width:100%}
+.ees-cur .more{margin:12px 16px}
 `;
 
 type State = {
@@ -54,8 +81,22 @@ type State = {
   view: "following" | "history";
   status: string;
   busy: boolean;
+  filling: boolean;
   shown: number;
+  order: SortOrder;
+  query: string;
+  anchor: number | undefined;
 };
+
+const COLUMNS: { label: string; key?: SortKey; cls?: string }[] = [
+  { label: "ブログ", key: "name" },
+  { label: "タイトル" },
+  { label: "最古ポスト", key: "oldest" },
+  { label: "ポスト数", key: "posts", cls: "num" },
+  { label: "最終ポスト", key: "updated" },
+  { label: "フォロー日", key: "followedAt" },
+  { label: "" },
+];
 
 export function openCuration(deps: {
   api: TumblrApi;
@@ -72,9 +113,17 @@ export function openCuration(deps: {
   root.addEventListener("keydown", (e) => e.stopPropagation());
 
   const header = document.createElement("header");
+  const toolbar = document.createElement("div");
+  toolbar.className = "toolbar";
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = "ブログ名・タイトルで絞り込み";
+  const count = document.createElement("span");
+  count.className = "count";
+  toolbar.append(search, count);
   const body = document.createElement("div");
   body.className = "body";
-  root.append(header, body);
+  root.append(header, toolbar, body);
   document.body.appendChild(root);
 
   const state: State = {
@@ -84,9 +133,18 @@ export function openCuration(deps: {
     view: "following",
     status: "フォロー一覧を取得中…",
     busy: true,
+    filling: false,
     shown: PAGE_ROWS,
+    order: { key: "oldest", dir: "desc" },
+    query: "",
+    anchor: undefined,
   };
   let closed = false;
+  search.addEventListener("input", () => {
+    state.query = search.value;
+    state.anchor = undefined;
+    renderFollowing();
+  });
 
   const button = (label: string, onClick: () => void, cls = "") => {
     const b = document.createElement("button");
@@ -110,7 +168,7 @@ export function openCuration(deps: {
     );
     unfollowBtn.disabled = state.busy || state.selected.size === 0;
     const fetchBtn = button("最古ポスト日を取得", () => void runFill());
-    fetchBtn.disabled = state.busy;
+    fetchBtn.disabled = state.busy || state.filling;
     const viewBtn = button(
       state.view === "following" ? "外した履歴" : "フォロー一覧へ",
       () => {
@@ -154,56 +212,140 @@ export function openCuration(deps: {
     return a;
   };
 
+  const visibleBlogs = () =>
+    sortCandidates(
+      filterBlogs(state.blogs, state.query),
+      state.protectedNames,
+      state.order,
+    );
+
+  const sortBy = (key: SortKey) => {
+    state.order =
+      state.order.key === key
+        ? { key, dir: state.order.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "name" ? "asc" : "desc" };
+    state.anchor = undefined;
+    renderFollowing();
+  };
+
   const renderFollowing = () => {
-    const t = table([
-      "",
-      "ブログ",
-      "タイトル",
-      "最古ポスト",
-      "ポスト数",
-      "最終ポスト",
-      "フォロー日",
-      "保護",
-    ]);
+    const rows = visibleBlogs();
+    const shown = rows.slice(0, state.shown);
+    const selectable = shown.filter((b) => !state.protectedNames.has(b.name));
+    const renderCount = () => {
+      count.textContent =
+        `${rows.length.toLocaleString()} 件` +
+        (state.selected.size ? ` ・ ${state.selected.size} 件選択中` : "");
+    };
+    renderCount();
+
+    const t = document.createElement("table");
+    const headRow = document.createElement("tr");
+    const allCb = document.createElement("input");
+    allCb.type = "checkbox";
+    allCb.title = "表示中をすべて選択";
+    const selectedShown = selectable.filter((b) => state.selected.has(b.name));
+    allCb.checked =
+      selectable.length > 0 && selectedShown.length === selectable.length;
+    allCb.indeterminate = selectedShown.length > 0 && !allCb.checked;
+    allCb.addEventListener("change", () => {
+      for (const b of selectable) {
+        if (allCb.checked) state.selected.add(b.name);
+        else state.selected.delete(b.name);
+      }
+      renderHeader();
+      renderFollowing();
+    });
+    const cbTh = document.createElement("th");
+    cbTh.appendChild(allCb);
+    headRow.appendChild(cbTh);
+    for (const col of COLUMNS) {
+      const th = document.createElement("th");
+      if (col.cls) th.classList.add(col.cls);
+      const sorted = col.key === state.order.key;
+      th.textContent =
+        col.label + (sorted ? (state.order.dir === "asc" ? " ▲" : " ▼") : "");
+      if (col.key) {
+        const key = col.key;
+        th.classList.add("sortable");
+        if (sorted) th.classList.add("sorted");
+        th.addEventListener("click", () => sortBy(key));
+      }
+      headRow.appendChild(th);
+    }
+    t.createTHead().appendChild(headRow);
+
     const tbody = t.createTBody();
-    const sorted = sortCandidates(state.blogs, state.protectedNames);
-    for (const b of sorted.slice(0, state.shown)) {
+    const setSelected = (name: string, on: boolean) => {
+      if (on) state.selected.add(name);
+      else state.selected.delete(name);
+    };
+    shown.forEach((b, index) => {
       const isProtected = state.protectedNames.has(b.name);
       const tr = tbody.insertRow();
-      if (isProtected) tr.className = "protected";
+      if (isProtected) tr.classList.add("protected");
+      if (state.selected.has(b.name)) tr.classList.add("selected");
       const cb = document.createElement("input");
       cb.type = "checkbox";
       cb.checked = state.selected.has(b.name);
       cb.disabled = isProtected;
-      cb.addEventListener("change", () => {
-        if (cb.checked) state.selected.add(b.name);
-        else state.selected.delete(b.name);
+      const toggle = (on: boolean, range: boolean) => {
+        if (range && state.anchor !== undefined) {
+          const [from, to] = [state.anchor, index].sort((x, y) => x - y);
+          for (const r of shown.slice(from, to + 1)) {
+            if (!state.protectedNames.has(r.name)) setSelected(r.name, on);
+          }
+          state.anchor = index;
+          renderHeader();
+          renderFollowing();
+          return;
+        }
+        setSelected(b.name, on);
+        state.anchor = index;
+        cb.checked = on;
+        tr.classList.toggle("selected", on);
         renderHeader();
+        renderCount();
+      };
+      cb.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggle(cb.checked, e.shiftKey);
       });
+      if (!isProtected) {
+        tr.addEventListener("click", (e) => {
+          if ((e.target as Element).closest("a,button")) return;
+          if (e.shiftKey) e.preventDefault();
+          toggle(!state.selected.has(b.name), e.shiftKey);
+        });
+      }
       cell(tr, cb);
       cell(tr, blogLink(b.name, b.url));
-      cell(tr, b.title, "title");
-      cell(tr, formatOldest(b.oldest));
+      cell(tr, b.title, "title").title = b.title;
+      cell(tr, formatOldest(b.oldest), b.oldest ? "date" : "date muted");
       cell(tr, b.posts.toLocaleString(), "num");
-      cell(tr, formatDate(b.updated));
-      cell(tr, formatDate(b.followedAt));
-      cell(
-        tr,
-        button(
-          isProtected ? "解除" : "保護",
-          () => void toggleProtected(b.name),
-        ),
+      cell(tr, formatDate(b.updated), "date");
+      cell(tr, formatDate(b.followedAt), "date");
+      const protect = button(
+        isProtected ? "保護中" : "保護",
+        () => void toggleProtected(b.name),
+        "ghost",
       );
-    }
+      protect.title = isProtected
+        ? "保護を解除して候補に戻す"
+        : "候補から外して最下部に固定する";
+      cell(tr, protect);
+    });
+    const scroll = body.scrollTop;
     body.replaceChildren(t);
-    const rest = sorted.length - state.shown;
+    body.scrollTop = scroll;
+    const rest = rows.length - state.shown;
     if (rest > 0) {
-      body.appendChild(
-        button(`さらに表示 (残り ${rest} 件)`, () => {
-          state.shown += PAGE_ROWS;
-          renderFollowing();
-        }),
-      );
+      const more = button(`さらに表示 (残り ${rest} 件)`, () => {
+        state.shown += PAGE_ROWS;
+        renderFollowing();
+      });
+      more.classList.add("more");
+      body.appendChild(more);
     }
   };
 
@@ -224,17 +366,9 @@ export function openCuration(deps: {
 
   const render = async () => {
     renderHeader();
+    toolbar.style.display = state.view === "following" ? "" : "none";
     if (state.view === "following") renderFollowing();
     else await renderHistory();
-  };
-
-  let renderTimer: ReturnType<typeof setTimeout> | undefined;
-  const renderSoon = () => {
-    if (renderTimer) return;
-    renderTimer = setTimeout(() => {
-      renderTimer = undefined;
-      void render();
-    }, 2000);
   };
 
   const saveFollowingCache = () =>
@@ -257,7 +391,7 @@ export function openCuration(deps: {
   };
 
   const runFill = async () => {
-    state.busy = true;
+    state.filling = true;
     const byName = new Map(state.blogs.map((b) => [b.name, b]));
     const total = state.blogs.length;
     let done = state.blogs.filter((b) => b.oldest).length;
@@ -272,14 +406,14 @@ export function openCuration(deps: {
         if (b && !b.oldest) done++;
         if (b) b.oldest = oldest;
         state.status = `最古ポスト日を取得中… ${done} / ${total}`;
-        renderSoon();
+        renderHeader();
       },
     });
     for (const [name, oldest] of result.oldest) {
       const b = byName.get(name);
       if (b) b.oldest = oldest;
     }
-    state.busy = false;
+    state.filling = false;
     const missing = state.blogs.filter((b) => !b.oldest).length;
     state.status = result.rateLimited
       ? `レート制限で中断しました。未取得 ${missing} 件。時間をおいて再取得してください`
