@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { isDashboardPath, isFollowingPath } from "./route";
 
 describe("isDashboardPath", () => {
+  it("/ は true", () => {
+    expect(isDashboardPath("/")).toBe(true);
+  });
+
   it("/dashboard は true", () => {
     expect(isDashboardPath("/dashboard")).toBe(true);
   });
