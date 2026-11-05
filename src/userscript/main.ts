@@ -1,5 +1,6 @@
 import { sampleFeed } from "../core/feed-sampling";
 import { openCuration } from "./curation-ui";
+import { createFillMode } from "./fill-mode";
 import { type HookedFetch, installHook } from "./hook";
 import { isDashboardPath, isFollowingPath, onRouteChange } from "./route";
 import { createStorage } from "./storage";
@@ -73,6 +74,21 @@ function installToggleButton(
   render();
 }
 
+function installFillButton(): void {
+  const mode = createFillMode();
+  const btn = createFloatingButton(isDashboardPath);
+  btn.style.right = "120px";
+  const render = () => {
+    btn.textContent = mode.isEnabled() ? "画像拡大: on" : "画像拡大: off";
+  };
+  btn.addEventListener("click", () => {
+    mode.toggle();
+    render();
+    btn.blur();
+  });
+  render();
+}
+
 (() => {
   const w = window as unknown as { fetch: HookedFetch };
   let enabled = localStorage.getItem(ENABLED_KEY) !== "0"; // 既定 ON
@@ -117,6 +133,8 @@ function installToggleButton(
       console.log("[ees] enabled:", v);
     },
   );
+
+  installFillButton();
 
   installCurationButton(storage);
 
