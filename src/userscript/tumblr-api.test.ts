@@ -46,6 +46,17 @@ describe("createTumblrApi.following", () => {
     );
   });
 
+  it("ページをまたいで重複したブログは1件にまとめる", async () => {
+    const apiFetch = vi.fn<ApiFetch>(async (_path, init) =>
+      Number(init?.queryParams?.offset) === 0
+        ? followingPage(["a", "b"])
+        : followingPage(["b", "c"]),
+    );
+    const api = createTumblrApi({ apiFetch, now: () => 5000, pageSize: 2 });
+    const blogs = await api.following();
+    expect(blogs.map((b) => b.name)).toEqual(["a", "b", "c"]);
+  });
+
   it("url と posts を含む fields を指定する", async () => {
     const apiFetch = vi.fn<ApiFetch>(async () => followingPage([]));
     await createTumblrApi({ apiFetch, now: () => 0 }).following();

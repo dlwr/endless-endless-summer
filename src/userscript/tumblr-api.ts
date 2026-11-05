@@ -87,7 +87,9 @@ export function createTumblrApi(deps: {
       };
       await Promise.all(Array.from({ length: concurrency }, worker));
       const now = deps.now();
-      return pages.flat().map((b) => ({
+      // offset で刻むと API のページが重なり、同じブログが複数回返る。
+      const blogs = new Map(pages.flat().map((b) => [b.name, b]));
+      return [...blogs.values()].map((b) => ({
         name: b.name,
         url: b.url,
         title: b.title,
