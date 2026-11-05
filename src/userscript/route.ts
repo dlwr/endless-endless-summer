@@ -1,5 +1,9 @@
 export function isDashboardPath(pathname: string): boolean {
-  return pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  return (
+    pathname === "/" ||
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/")
+  );
 }
 
 export function isFollowingPath(pathname: string): boolean {
