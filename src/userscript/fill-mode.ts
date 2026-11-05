@@ -1,7 +1,10 @@
 import { isDashboardPath, onRouteChange } from "./route";
+import { resolveShortcut } from "./shortcuts";
 
 const FILL_KEY = "ees:fill";
 const FILL_CLASS = "ees-fill";
+const REVEAL_ATTR = "data-ees-reveal";
+const REVEAL_MS = 1500;
 
 const ROOT = `html.${FILL_CLASS}`;
 const IMAGE = "figure:has(> button img)";
@@ -39,7 +42,10 @@ ${IMAGE_POST} header, ${IMAGE_POST} footer {
 }
 ${IMAGE_POST} header { top: 0; }
 ${IMAGE_POST} footer { bottom: 0; }
-${IMAGE_POST}:hover header, ${IMAGE_POST}:hover footer { opacity: 1; }
+${IMAGE_POST} header:hover, ${IMAGE_POST} footer:hover { opacity: 1; }
+${IMAGE_POST}[${REVEAL_ATTR}] footer {
+  position: fixed !important; left: calc(50% - 278px); right: auto; width: 556px; opacity: 1;
+}
 `;
 
 export function createFillMode() {
@@ -55,6 +61,19 @@ export function createFillMode() {
   document.documentElement.append(style);
   sync();
   onRouteChange(sync);
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (resolveShortcut(e) !== "like") return;
+      const article = document.querySelector(
+        ":focus article, article:focus-within",
+      );
+      if (!article) return;
+      article.setAttribute(REVEAL_ATTR, "");
+      setTimeout(() => article.removeAttribute(REVEAL_ATTR), REVEAL_MS);
+    },
+    true,
+  );
   return {
     isEnabled: () => enabled,
     toggle: () => {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFillMode } from "./fill-mode";
 
 const applied = () => document.documentElement.classList.contains("ees-fill");
@@ -52,5 +52,64 @@ describe("createFillMode", () => {
     history.replaceState(null, "", "/following");
     createFillMode().toggle();
     expect(applied()).toBe(false);
+  });
+});
+
+describe("L キーでのフッター表示", () => {
+  const pressKey = (init: KeyboardEventInit) =>
+    window.dispatchEvent(new KeyboardEvent("keydown", init));
+  const revealed = (article: Element) =>
+    article.hasAttribute("data-ees-reveal");
+
+  const focusedArticle = () => {
+    const item = document.createElement("div");
+    item.tabIndex = -1;
+    const article = document.createElement("article");
+    item.append(article);
+    document.body.append(item);
+    item.focus();
+    return article;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.innerHTML = "";
+    createFillMode();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("現在の投稿のフッターを出す", () => {
+    const article = focusedArticle();
+    pressKey({ key: "l" });
+    expect(revealed(article)).toBe(true);
+  });
+
+  it("時間が経つと隠す", () => {
+    const article = focusedArticle();
+    pressKey({ key: "l" });
+    vi.advanceTimersByTime(1500);
+    expect(revealed(article)).toBe(false);
+  });
+
+  it("修飾キー付きでは出さない", () => {
+    const article = focusedArticle();
+    pressKey({ key: "l", metaKey: true });
+    expect(revealed(article)).toBe(false);
+  });
+
+  it("他のキーでは出さない", () => {
+    const article = focusedArticle();
+    pressKey({ key: "j" });
+    expect(revealed(article)).toBe(false);
+  });
+
+  it("投稿にフォーカスがなければ何もしない", () => {
+    const article = document.createElement("article");
+    document.body.append(article);
+    pressKey({ key: "l" });
+    expect(revealed(article)).toBe(false);
   });
 });
