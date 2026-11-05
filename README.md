@@ -66,7 +66,6 @@ TypeScript / Vitest / esbuild / Biome / pnpm。
 - `src/core/` — フレームワーク非依存の共有ロジック(年均等サンプリング、フィード構築、フォロー整理)
 - `src/userscript/` — ユーザースクリプト(fetch フック、apiFetch クライアント、ページング封筒、ストレージ、トグル、キーマップ)
 - `build/userscript.mjs` — esbuild で Tampermonkey ヘッダー付き `.user.js` を生成
-- `docs/superpowers/` — 設計・spike レポート・実装計画
 
 ## リリース
 
