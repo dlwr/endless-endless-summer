@@ -1,11 +1,17 @@
-import { sampleFeed } from "../core/feed-sampling";
+import { cachedFollowing, sampleFeed } from "../core/feed-sampling";
+import { backgroundFill } from "../core/oldest";
 import { openCuration } from "./curation-ui";
 import { createFillMode } from "./fill-mode";
 import { type HookedFetch, installHook } from "./hook";
 import { isDashboardPath, isFollowingPath, onRouteChange } from "./route";
 import { createStorage } from "./storage";
 import { createPager } from "./timeline-page";
-import { createFeedClient, createTumblrApi, findApiFetch } from "./tumblr-api";
+import {
+  type ApiFetch,
+  createFeedClient,
+  createTumblrApi,
+  findApiFetch,
+} from "./tumblr-api";
 
 const ENABLED_KEY = "ees:enabled";
 
@@ -135,6 +141,36 @@ function installFillButton(): void {
   );
 
   installFillButton();
+
+  const lazyApiFetch: ApiFetch = (...args) => {
+    const apiFetch = findApiFetch(window);
+    if (!apiFetch) throw new Error("window.tumblr.apiFetch is unavailable");
+    return apiFetch(...args);
+  };
+  const api = createTumblrApi({
+    apiFetch: lazyApiFetch,
+    now: () => Math.floor(Date.now() / 1000),
+  });
+  void backgroundFill({
+    following: () =>
+      cachedFollowing({
+        client: createFeedClient(api),
+        storage,
+        userName: "me",
+        followingTtl: 86_400,
+      }),
+    storage,
+    fetchOldest: api.oldest,
+    isActive: () =>
+      enabled &&
+      isDashboardPath(location.pathname) &&
+      !document.hidden &&
+      findApiFetch(window) !== undefined,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    gapMs: 300,
+    idleMs: 5_000,
+    cooldownMs: 900_000,
+  });
 
   installCurationButton(storage);
 
