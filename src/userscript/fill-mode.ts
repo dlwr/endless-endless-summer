@@ -35,7 +35,7 @@ ${IMAGE_POST} ${IMAGE} * {
   max-width: none !important; max-height: none !important;
 }
 ${IMAGE_POST} ${IMAGE} img { position: static !important; object-fit: contain !important; }
-${IMAGE_POST} div:has(figure):not(:has(figure > button)):not(header *) { display: none !important; }
+${IMAGE_POST} div:has(> div > div > div > div > figure):has(+ div figure > button img) { display: none !important; }
 ${IMAGE_POST} header, ${IMAGE_POST} footer {
   position: absolute !important; left: 0; right: 0; z-index: 2;
   opacity: 0; transition: opacity 0.15s; background: #fff;
