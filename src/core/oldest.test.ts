@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Oldest } from "./curation";
 import type { Storage } from "./feed-sampling";
-import { fillOldest, RateLimitedError } from "./oldest";
+import { backgroundFill, fillOldest, RateLimitedError } from "./oldest";
 
 function memoryStorage(init: Record<string, unknown> = {}): Storage & {
   data: Map<string, unknown>;
@@ -183,5 +183,96 @@ describe("fillOldest", () => {
       shouldStop: () => stop,
     });
     expect(fetchOldest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("backgroundFill", () => {
+  const options = (
+    over: Partial<Parameters<typeof backgroundFill>[0]> = {},
+  ): Parameters<typeof backgroundFill>[0] => ({
+    following: async () => [{ name: "a" }, { name: "b" }],
+    storage: memoryStorage(),
+    fetchOldest: async () => ({ kind: "found", ts: 1 }),
+    isActive: () => true,
+    sleep: async () => {},
+    gapMs: 300,
+    idleMs: 5000,
+    cooldownMs: 900_000,
+    ...over,
+  });
+
+  it("未取得のブログを取得して保存する", async () => {
+    const storage = memoryStorage();
+    await backgroundFill(options({ storage }));
+    expect(storage.data.get("oldest:b")).toBe(1);
+  });
+
+  it("取得済みのブログは取得しない", async () => {
+    const fetchOldest = vi.fn(
+      async (_name: string): Promise<Oldest> => ({ kind: "found", ts: 1 }),
+    );
+    const storage = memoryStorage({
+      "first:a": { kind: "found", ts: 5 },
+      "first:b": { kind: "empty" },
+    });
+    await backgroundFill(options({ storage, fetchOldest }));
+    expect(fetchOldest).not.toHaveBeenCalled();
+  });
+
+  it("1件ごとに間隔を空ける", async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    await backgroundFill(options({ sleep }));
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([300, 300]);
+  });
+
+  it("非アクティブの間は待ち、戻ったら取得する", async () => {
+    const isActive = vi
+      .fn<() => boolean>()
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    const sleep = vi.fn(async (_ms: number) => {});
+    await backgroundFill(options({ isActive, sleep }));
+    expect(sleep.mock.calls[0][0]).toBe(5000);
+  });
+
+  it("途中で非アクティブになると取得を止める", async () => {
+    const fetched: string[] = [];
+    let active = true;
+    let sleeps = 0;
+    await backgroundFill(
+      options({
+        isActive: () => active,
+        fetchOldest: async (name) => {
+          fetched.push(name);
+          active = false;
+          return { kind: "found", ts: 1 };
+        },
+        sleep: async () => {
+          sleeps++;
+          if (sleeps === 2) active = true;
+        },
+      }),
+    );
+    expect(fetched).toEqual(["a", "b"]);
+  });
+
+  it("レート制限に当たると待ってから再開する", async () => {
+    const fetchOldest = vi
+      .fn<(name: string) => Promise<Oldest>>()
+      .mockRejectedValueOnce(new RateLimitedError())
+      .mockResolvedValue({ kind: "found", ts: 1 });
+    const sleep = vi.fn(async (_ms: number) => {});
+    await backgroundFill(options({ fetchOldest, sleep }));
+    expect(sleep.mock.calls[0][0]).toBe(900_000);
+  });
+
+  it("フォロー一覧の取得に失敗すると待ってから再試行する", async () => {
+    const following = vi
+      .fn<() => Promise<{ name: string }[]>>()
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue([]);
+    const sleep = vi.fn(async (_ms: number) => {});
+    await backgroundFill(options({ following, sleep }));
+    expect(sleep.mock.calls[0][0]).toBe(900_000);
   });
 });
