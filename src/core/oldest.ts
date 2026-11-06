@@ -60,3 +60,42 @@ export async function fillOldest(
   await Promise.all(Array.from({ length: o.concurrency }, worker));
   return { oldest, pending: queue.length, failed, rateLimited };
 }
+
+export type BackgroundFillOptions = {
+  following: () => Promise<{ name: string }[]>;
+  storage: Storage;
+  fetchOldest: (name: string) => Promise<Oldest>;
+  isActive: () => boolean;
+  sleep: (ms: number) => Promise<void>;
+  gapMs: number;
+  idleMs: number;
+  cooldownMs: number;
+};
+
+export async function backgroundFill(o: BackgroundFillOptions): Promise<void> {
+  while (true) {
+    if (!o.isActive()) {
+      await o.sleep(o.idleMs);
+      continue;
+    }
+    try {
+      const blogs = await o.following();
+      const result = await fillOldest({
+        blogs: blogs.map(({ name }) => ({ name, posts: 0 })),
+        storage: o.storage,
+        fetchOldest: async (name) => {
+          const got = await o.fetchOldest(name);
+          await o.sleep(o.gapMs);
+          return got;
+        },
+        concurrency: 1,
+        shouldStop: () => !o.isActive(),
+      });
+      if (result.rateLimited) await o.sleep(o.cooldownMs);
+      else if (result.pending === 0) return;
+    } catch (err) {
+      console.warn("[ees] background fill failed:", err);
+      await o.sleep(o.cooldownMs);
+    }
+  }
+}

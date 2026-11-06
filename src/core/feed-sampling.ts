@@ -34,7 +34,12 @@ function shuffle<T>(items: T[], rng: Rng): T[] {
   return result;
 }
 
-async function cachedFollowing(o: SampleFeedOptions): Promise<FollowingBlog[]> {
+export async function cachedFollowing(
+  o: Pick<
+    SampleFeedOptions,
+    "client" | "storage" | "userName" | "followingTtl"
+  >,
+): Promise<FollowingBlog[]> {
   const key = `following:${o.userName}`;
   const cached = await o.storage.getJSON<FollowingBlog[]>(key);
   if (cached) return cached;
