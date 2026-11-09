@@ -113,3 +113,41 @@ describe("L キーでのフッター表示", () => {
     expect(revealed(article)).toBe(false);
   });
 });
+
+describe("画面に収まらない投稿の印付け", () => {
+  const post = (height: number, html = "<header></header><div></div>") => {
+    const article = document.createElement("article");
+    article.innerHTML = `<div>${html}</div>`;
+    Object.defineProperty(article, "offsetHeight", { value: height });
+    document.body.append(article);
+    return article;
+  };
+  const scroll = () => window.dispatchEvent(new Event("scroll"));
+  const long = (article: Element) => article.hasAttribute("data-ees-long");
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    createFillMode();
+  });
+
+  it("画面より高い投稿に印を付ける", () => {
+    const article = post(window.innerHeight + 1);
+    scroll();
+    expect(long(article)).toBe(true);
+  });
+
+  it("画面に収まる投稿には付けない", () => {
+    const article = post(window.innerHeight);
+    scroll();
+    expect(long(article)).toBe(false);
+  });
+
+  it("画像投稿には付けない", () => {
+    const article = post(
+      window.innerHeight + 1,
+      "<header></header><div><figure><button><img></button></figure></div>",
+    );
+    scroll();
+    expect(long(article)).toBe(false);
+  });
+});
