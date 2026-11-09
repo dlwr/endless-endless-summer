@@ -5,6 +5,7 @@ const FILL_KEY = "ees:fill";
 const FILL_CLASS = "ees-fill";
 const REVEAL_ATTR = "data-ees-reveal";
 const REVEAL_MS = 1500;
+const LONG_ATTR = "data-ees-long";
 
 const ROOT = `html.${FILL_CLASS}`;
 const IMAGE = "figure:has(> button img)";
@@ -46,6 +47,12 @@ ${IMAGE_POST} header:hover, ${IMAGE_POST} footer:hover { opacity: 1; }
 ${IMAGE_POST}[${REVEAL_ATTR}] footer {
   position: fixed !important; left: calc(50% - 278px); right: auto; width: 556px; opacity: 1;
 }
+${ROOT} article[${LONG_ATTR}] > div > header + div {
+  width: 100vw !important; margin-left: calc(50% - 50vw) !important;
+  /* 15px は J の停止位置、72px はヘッダー */
+  height: calc(100vh - 87px); overflow: auto hidden; box-sizing: border-box;
+  columns: 28em; column-fill: auto; column-gap: 32px; padding: 0 16px; background: #fff;
+}
 `;
 
 export function createFillMode() {
@@ -73,6 +80,19 @@ export function createFillMode() {
       setTimeout(() => article.removeAttribute(REVEAL_ATTR), REVEAL_MS);
     },
     true,
+  );
+  window.addEventListener(
+    "scroll",
+    () => {
+      for (const article of document.querySelectorAll(
+        `article:not([${LONG_ATTR}]):not(:has(figure > button img))`,
+      )) {
+        if ((article as HTMLElement).offsetHeight > window.innerHeight) {
+          article.setAttribute(LONG_ATTR, "");
+        }
+      }
+    },
+    { passive: true },
   );
   return {
     isEnabled: () => enabled,
