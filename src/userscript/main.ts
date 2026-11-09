@@ -1,6 +1,7 @@
 import { cachedFollowing, sampleFeed } from "../core/feed-sampling";
 import { backgroundFill } from "../core/oldest";
 import { openCuration } from "./curation-ui";
+import { installCursorHide } from "./cursor-hide";
 import { createFillMode } from "./fill-mode";
 import { type HookedFetch, installHook } from "./hook";
 import { isDashboardPath, isFollowingPath, onRouteChange } from "./route";
@@ -141,6 +142,7 @@ function installFillButton(): void {
   );
 
   installFillButton();
+  installCursorHide();
 
   const lazyApiFetch: ApiFetch = (...args) => {
     const apiFetch = findApiFetch(window);
