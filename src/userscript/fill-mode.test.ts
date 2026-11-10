@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFillMode } from "./fill-mode";
+import { createFillMode, LONG_BODY } from "./fill-mode";
 
 const applied = () => document.documentElement.classList.contains("ees-fill");
 
@@ -149,5 +149,29 @@ describe("画面に収まらない投稿の印付け", () => {
     );
     scroll();
     expect(long(article)).toBe(false);
+  });
+});
+
+describe("段組みする本文のセレクタ", () => {
+  const body = (html: string) => {
+    document.documentElement.className = "ees-fill";
+    document.body.innerHTML = `<article data-ees-long>${html}</article>`;
+    return [...document.querySelectorAll(LONG_BODY)].map((el) => el.id);
+  };
+
+  it("オリジナル投稿の本文に当たる", () => {
+    expect(
+      body(
+        "<div><header></header><div id=body></div><div><footer></footer></div></div><div></div>",
+      ),
+    ).toEqual(["body"]);
+  });
+
+  it("リブログ投稿の本文に当たる", () => {
+    expect(
+      body(
+        "<header></header><div><div id=body></div><div><footer></footer></div></div><div></div>",
+      ),
+    ).toEqual(["body"]);
   });
 });
