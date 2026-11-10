@@ -10,6 +10,9 @@ const LONG_ATTR = "data-ees-long";
 const ROOT = `html.${FILL_CLASS}`;
 const IMAGE = "figure:has(> button img)";
 const IMAGE_POST = `${ROOT} article:has(figure > button img)`;
+const LONG_POST = `${ROOT} article[${LONG_ATTR}]`;
+// リブログは header が article 直下に来て、本文とフッターが同じ div に入る
+export const LONG_BODY = `${LONG_POST} > div > header + div, ${LONG_POST} > header + div > div:first-child`;
 
 // :has() は入れ子にできない。入れ子にするとルールごと無視される。
 const FILL_CSS = `
@@ -47,7 +50,7 @@ ${IMAGE_POST} header:hover, ${IMAGE_POST} footer:hover { opacity: 1; }
 ${IMAGE_POST}[${REVEAL_ATTR}] footer {
   position: fixed !important; left: calc(50% - 278px); right: auto; width: 556px; opacity: 1;
 }
-${ROOT} article[${LONG_ATTR}] > div > header + div {
+${LONG_BODY} {
   width: 100vw !important; margin-left: calc(50% - 50vw) !important;
   /* 15px は J の停止位置、72px はヘッダー */
   height: calc(100vh - 87px); overflow: auto hidden; box-sizing: border-box;
