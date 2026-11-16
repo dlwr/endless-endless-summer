@@ -58,13 +58,21 @@ ${LONG_BODY} {
 }
 `;
 
-export function createFillMode() {
+export function createFillMode(
+  onChange: (enabled: boolean) => void = () => {},
+) {
   let enabled = localStorage.getItem(FILL_KEY) === "1";
   const sync = () => {
     document.documentElement.classList.toggle(
       FILL_CLASS,
       enabled && isDashboardPath(location.pathname),
     );
+    onChange(enabled);
+  };
+  const toggle = () => {
+    enabled = !enabled;
+    localStorage.setItem(FILL_KEY, enabled ? "1" : "0");
+    sync();
   };
   const style = document.createElement("style");
   style.textContent = FILL_CSS;
@@ -74,7 +82,17 @@ export function createFillMode() {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (resolveShortcut(e) !== "like") return;
+      const action = resolveShortcut(e);
+      if (action === "toggleFill") {
+        const typing = (e.target as Element).closest?.(
+          "input, textarea, select, [contenteditable]",
+        );
+        if (!e.repeat && !typing && isDashboardPath(location.pathname)) {
+          toggle();
+        }
+        return;
+      }
+      if (action !== "like") return;
       const article = document.querySelector(
         ":focus article, article:focus-within",
       );
@@ -97,12 +115,5 @@ export function createFillMode() {
     },
     { passive: true },
   );
-  return {
-    isEnabled: () => enabled,
-    toggle: () => {
-      enabled = !enabled;
-      localStorage.setItem(FILL_KEY, enabled ? "1" : "0");
-      sync();
-    },
-  };
+  return { toggle };
 }

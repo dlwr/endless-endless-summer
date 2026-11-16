@@ -55,6 +55,71 @@ describe("createFillMode", () => {
   });
 });
 
+describe("F キーでの切り替え", () => {
+  const pressKey = (init: KeyboardEventInit, target: EventTarget = window) =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, ...init }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.className = "";
+    document.body.innerHTML = "";
+    history.replaceState(null, "", "/dashboard");
+  });
+
+  it("F で有効になる", () => {
+    createFillMode();
+    pressKey({ key: "f" });
+    expect(applied()).toBe(true);
+  });
+
+  it("もう一度押すと無効に戻る", () => {
+    createFillMode();
+    pressKey({ key: "f" });
+    pressKey({ key: "f" });
+    expect(applied()).toBe(false);
+  });
+
+  it("切り替え後の状態を onChange に渡す", () => {
+    const onChange = vi.fn();
+    createFillMode(onChange);
+    pressKey({ key: "f" });
+    expect(onChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("修飾キー付きでは切り替えない", () => {
+    createFillMode();
+    pressKey({ key: "f", metaKey: true });
+    expect(applied()).toBe(false);
+  });
+
+  it("押しっぱなしのリピートでは切り替えない", () => {
+    createFillMode();
+    pressKey({ key: "f", repeat: true });
+    expect(applied()).toBe(false);
+  });
+
+  it.each([
+    ["input", "<input>"],
+    ["textarea", "<textarea></textarea>"],
+    ["contenteditable", "<div contenteditable></div>"],
+  ])("%s への入力中は切り替えない", (_name, html) => {
+    createFillMode();
+    document.body.innerHTML = html;
+    pressKey({ key: "f" }, document.body.firstElementChild as Element);
+    expect(applied()).toBe(false);
+  });
+
+  it("ダッシュボード以外では切り替えない", () => {
+    history.replaceState(null, "", "/following");
+    createFillMode();
+    pressKey({ key: "f" });
+    history.pushState(null, "", "/dashboard");
+    expect(applied()).toBe(false);
+  });
+});
+
 describe("L キーでのフッター表示", () => {
   const pressKey = (init: KeyboardEventInit) =>
     window.dispatchEvent(new KeyboardEvent("keydown", init));

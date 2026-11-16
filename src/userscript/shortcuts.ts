@@ -6,6 +6,7 @@ export type ShortcutAction =
   | "reblogDialog"
   | "open"
   | "reroll"
+  | "toggleFill"
   | "help";
 
 type KeyEventLike = {
@@ -23,6 +24,7 @@ const MAP: Record<string, ShortcutAction> = {
   l: "like",
   o: "open",
   r: "reroll",
+  f: "toggleFill",
   "?": "help",
 };
 

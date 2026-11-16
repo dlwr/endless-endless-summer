@@ -82,18 +82,15 @@ function installToggleButton(
 }
 
 function installFillButton(): void {
-  const mode = createFillMode();
   const btn = createFloatingButton(isDashboardPath);
   btn.style.right = "120px";
-  const render = () => {
-    btn.textContent = mode.isEnabled() ? "画像拡大: on" : "画像拡大: off";
-  };
+  const mode = createFillMode((enabled) => {
+    btn.textContent = enabled ? "画像拡大: on" : "画像拡大: off";
+  });
   btn.addEventListener("click", () => {
     mode.toggle();
-    render();
     btn.blur();
   });
-  render();
 }
 
 (() => {
