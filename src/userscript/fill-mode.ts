@@ -59,7 +59,7 @@ ${LONG_BODY} {
   width: 100vw !important; margin-left: calc(50% - 50vw) !important;
   /* 15px は J の停止位置、72px はヘッダー */
   height: calc(100vh - 87px); overflow: auto hidden; box-sizing: border-box;
-  columns: 28em; column-fill: auto; column-gap: 32px; padding: 0 16px; background: #fff;
+  columns: 28em; column-gap: 32px; padding: 0 16px; background: #fff;
 }
 `;
 
