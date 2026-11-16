@@ -13,6 +13,7 @@ const IMG = ":is(figure > button img, figure > div > img)";
 const IMAGE = `figure:has(${IMG})`;
 const IMAGE_POST = `${ROOT} article:has(${IMG})`;
 export const FILL_IMAGE = `${IMAGE_POST} ${IMAGE}`;
+export const FILL_STRETCH = `${FILL_IMAGE} :is(:has(img), img)`;
 const LONG_POST = `${ROOT} article[${LONG_ATTR}]`;
 // リブログは header が article 直下に来て、本文とフッターが同じ div に入る
 export const LONG_BODY = `${LONG_POST} > div > header + div, ${LONG_POST} > header + div > div:first-child`;
@@ -39,7 +40,7 @@ ${FILL_IMAGE} {
   height: calc(100vh - 15px) !important;
   margin: 0 0 0 calc(50% - 50vw) !important; background: #000;
 }
-${FILL_IMAGE} * {
+${FILL_STRETCH} {
   width: 100% !important; height: 100% !important; padding: 0 !important;
   max-width: none !important; max-height: none !important;
 }
