@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFillMode, LONG_BODY } from "./fill-mode";
+import { createFillMode, FILL_IMAGE, LONG_BODY } from "./fill-mode";
 
 const applied = () => document.documentElement.classList.contains("ees-fill");
 
@@ -214,6 +214,53 @@ describe("画面に収まらない投稿の印付け", () => {
     );
     scroll();
     expect(long(article)).toBe(false);
+  });
+
+  it("ライトボックスのない小さい画像の投稿にも付けない", () => {
+    const article = post(
+      window.innerHeight + 1,
+      "<header></header><div><figure><div><img></div></figure></div>",
+    );
+    scroll();
+    expect(long(article)).toBe(false);
+  });
+});
+
+describe("最大化する画像のセレクタ", () => {
+  const images = (html: string) => {
+    document.documentElement.className = "ees-fill";
+    document.body.innerHTML = `<article>${html}</article>`;
+    return [...document.querySelectorAll(FILL_IMAGE)].map((el) => el.id);
+  };
+
+  it("ライトボックスで開ける画像に当たる", () => {
+    expect(
+      images(
+        "<div><figure id=big><button><span><div><img></div></span></button></figure></div>",
+      ),
+    ).toEqual(["big"]);
+  });
+
+  it("ライトボックスのない小さい画像に当たる", () => {
+    expect(
+      images("<div><figure id=small><div><img></div></figure></div>"),
+    ).toEqual(["small"]);
+  });
+
+  it("大きい画像と小さい画像が混ざった投稿では両方に当たる", () => {
+    expect(
+      images(
+        "<div><figure id=big><button><img></button></figure></div><div><figure id=small><div><img></div></figure></div>",
+      ),
+    ).toEqual(["big", "small"]);
+  });
+
+  it("アバターには当たらない", () => {
+    expect(
+      images(
+        "<div><figure id=avatar><div><span><a><img></a></span></div></figure></div><div><figure id=big><button><img></button></figure></div>",
+      ),
+    ).toEqual(["big"]);
   });
 });
 
