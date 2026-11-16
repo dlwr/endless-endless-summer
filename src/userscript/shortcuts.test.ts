@@ -41,6 +41,10 @@ describe("resolveShortcut", () => {
     expect(resolveShortcut(key("r"))).toBe("reroll");
   });
 
+  it("f は toggleFill", () => {
+    expect(resolveShortcut(key("f"))).toBe("toggleFill");
+  });
+
   it("? は help", () => {
     expect(resolveShortcut(key("?"))).toBe("help");
   });

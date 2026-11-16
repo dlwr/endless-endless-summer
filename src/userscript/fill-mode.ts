@@ -8,8 +8,11 @@ const REVEAL_MS = 1500;
 const LONG_ATTR = "data-ees-long";
 
 const ROOT = `html.${FILL_CLASS}`;
-const IMAGE = "figure:has(> button img)";
-const IMAGE_POST = `${ROOT} article:has(figure > button img)`;
+// 元画像が小さいとライトボックスの button が付かず figure > div > img になる
+const IMG = ":is(figure > button img, figure > div > img)";
+const IMAGE = `figure:has(${IMG})`;
+const IMAGE_POST = `${ROOT} article:has(${IMG})`;
+export const FILL_IMAGE = `${IMAGE_POST} ${IMAGE}`;
 const LONG_POST = `${ROOT} article[${LONG_ATTR}]`;
 // リブログは header が article 直下に来て、本文とフッターが同じ div に入る
 export const LONG_BODY = `${LONG_POST} > div > header + div, ${LONG_POST} > header + div > div:first-child`;
@@ -23,23 +26,23 @@ ${ROOT} div:has(> div > main), ${ROOT} div:has(> div > div > main) {
   flex: 0 0 556px !important; width: 556px !important; min-width: 0 !important;
 }
 ${ROOT} div:has(> div > div > div > main) > :not(:has(main)) { display: none !important; }
-${IMAGE_POST} div:has(figure > button img) { overflow: visible !important; }
-${IMAGE_POST} div:has(> figure > button img),
-${IMAGE_POST} div:has(> div > figure > button img) {
+${IMAGE_POST} div:has(${IMG}) { overflow: visible !important; }
+${IMAGE_POST} div:has(> figure ${IMG}),
+${IMAGE_POST} div:has(> div > figure ${IMG}) {
   display: block !important; padding: 0 !important;
 }
-${IMAGE_POST} ${IMAGE} {
+${FILL_IMAGE} {
   display: block !important; width: 100vw !important; max-width: none !important;
   /* J で止まる位置は記事上端が y=15 になる */
   height: calc(100vh - 15px) !important;
   margin: 0 0 0 calc(50% - 50vw) !important; background: #000;
 }
-${IMAGE_POST} ${IMAGE} * {
+${FILL_IMAGE} * {
   width: 100% !important; height: 100% !important; padding: 0 !important;
   max-width: none !important; max-height: none !important;
 }
-${IMAGE_POST} ${IMAGE} img { position: static !important; object-fit: contain !important; }
-${IMAGE_POST} div:has(> div > div > div > div > figure):has(+ div figure > button img) { display: none !important; }
+${FILL_IMAGE} img { position: static !important; object-fit: contain !important; }
+${IMAGE_POST} div:has(> div > div > div > div > figure):has(+ div ${IMG}) { display: none !important; }
 ${IMAGE_POST} header, ${IMAGE_POST} footer {
   position: absolute !important; left: 0; right: 0; z-index: 2;
   opacity: 0; transition: opacity 0.15s; background: #fff;
@@ -58,13 +61,21 @@ ${LONG_BODY} {
 }
 `;
 
-export function createFillMode() {
+export function createFillMode(
+  onChange: (enabled: boolean) => void = () => {},
+) {
   let enabled = localStorage.getItem(FILL_KEY) === "1";
   const sync = () => {
     document.documentElement.classList.toggle(
       FILL_CLASS,
       enabled && isDashboardPath(location.pathname),
     );
+    onChange(enabled);
+  };
+  const toggle = () => {
+    enabled = !enabled;
+    localStorage.setItem(FILL_KEY, enabled ? "1" : "0");
+    sync();
   };
   const style = document.createElement("style");
   style.textContent = FILL_CSS;
@@ -74,7 +85,17 @@ export function createFillMode() {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (resolveShortcut(e) !== "like") return;
+      const action = resolveShortcut(e);
+      if (action === "toggleFill") {
+        const typing = (e.target as Element).closest?.(
+          "input, textarea, select, [contenteditable]",
+        );
+        if (!e.repeat && !typing && isDashboardPath(location.pathname)) {
+          toggle();
+        }
+        return;
+      }
+      if (action !== "like") return;
       const article = document.querySelector(
         ":focus article, article:focus-within",
       );
@@ -88,7 +109,7 @@ export function createFillMode() {
     "scroll",
     () => {
       for (const article of document.querySelectorAll(
-        `article:not([${LONG_ATTR}]):not(:has(figure > button img))`,
+        `article:not([${LONG_ATTR}]):not(:has(${IMG}))`,
       )) {
         if ((article as HTMLElement).offsetHeight > window.innerHeight) {
           article.setAttribute(LONG_ATTR, "");
@@ -97,12 +118,5 @@ export function createFillMode() {
     },
     { passive: true },
   );
-  return {
-    isEnabled: () => enabled,
-    toggle: () => {
-      enabled = !enabled;
-      localStorage.setItem(FILL_KEY, enabled ? "1" : "0");
-      sync();
-    },
-  };
+  return { toggle };
 }

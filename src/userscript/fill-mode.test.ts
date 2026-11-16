@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFillMode, LONG_BODY } from "./fill-mode";
+import { createFillMode, FILL_IMAGE, LONG_BODY } from "./fill-mode";
 
 const applied = () => document.documentElement.classList.contains("ees-fill");
 
@@ -51,6 +51,71 @@ describe("createFillMode", () => {
   it("ダッシュボード以外で有効にしても効かない", () => {
     history.replaceState(null, "", "/following");
     createFillMode().toggle();
+    expect(applied()).toBe(false);
+  });
+});
+
+describe("F キーでの切り替え", () => {
+  const pressKey = (init: KeyboardEventInit, target: EventTarget = window) =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, ...init }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.className = "";
+    document.body.innerHTML = "";
+    history.replaceState(null, "", "/dashboard");
+  });
+
+  it("F で有効になる", () => {
+    createFillMode();
+    pressKey({ key: "f" });
+    expect(applied()).toBe(true);
+  });
+
+  it("もう一度押すと無効に戻る", () => {
+    createFillMode();
+    pressKey({ key: "f" });
+    pressKey({ key: "f" });
+    expect(applied()).toBe(false);
+  });
+
+  it("切り替え後の状態を onChange に渡す", () => {
+    const onChange = vi.fn();
+    createFillMode(onChange);
+    pressKey({ key: "f" });
+    expect(onChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("修飾キー付きでは切り替えない", () => {
+    createFillMode();
+    pressKey({ key: "f", metaKey: true });
+    expect(applied()).toBe(false);
+  });
+
+  it("押しっぱなしのリピートでは切り替えない", () => {
+    createFillMode();
+    pressKey({ key: "f", repeat: true });
+    expect(applied()).toBe(false);
+  });
+
+  it.each([
+    ["input", "<input>"],
+    ["textarea", "<textarea></textarea>"],
+    ["contenteditable", "<div contenteditable></div>"],
+  ])("%s への入力中は切り替えない", (_name, html) => {
+    createFillMode();
+    document.body.innerHTML = html;
+    pressKey({ key: "f" }, document.body.firstElementChild as Element);
+    expect(applied()).toBe(false);
+  });
+
+  it("ダッシュボード以外では切り替えない", () => {
+    history.replaceState(null, "", "/following");
+    createFillMode();
+    pressKey({ key: "f" });
+    history.pushState(null, "", "/dashboard");
     expect(applied()).toBe(false);
   });
 });
@@ -149,6 +214,53 @@ describe("画面に収まらない投稿の印付け", () => {
     );
     scroll();
     expect(long(article)).toBe(false);
+  });
+
+  it("ライトボックスのない小さい画像の投稿にも付けない", () => {
+    const article = post(
+      window.innerHeight + 1,
+      "<header></header><div><figure><div><img></div></figure></div>",
+    );
+    scroll();
+    expect(long(article)).toBe(false);
+  });
+});
+
+describe("最大化する画像のセレクタ", () => {
+  const images = (html: string) => {
+    document.documentElement.className = "ees-fill";
+    document.body.innerHTML = `<article>${html}</article>`;
+    return [...document.querySelectorAll(FILL_IMAGE)].map((el) => el.id);
+  };
+
+  it("ライトボックスで開ける画像に当たる", () => {
+    expect(
+      images(
+        "<div><figure id=big><button><span><div><img></div></span></button></figure></div>",
+      ),
+    ).toEqual(["big"]);
+  });
+
+  it("ライトボックスのない小さい画像に当たる", () => {
+    expect(
+      images("<div><figure id=small><div><img></div></figure></div>"),
+    ).toEqual(["small"]);
+  });
+
+  it("大きい画像と小さい画像が混ざった投稿では両方に当たる", () => {
+    expect(
+      images(
+        "<div><figure id=big><button><img></button></figure></div><div><figure id=small><div><img></div></figure></div>",
+      ),
+    ).toEqual(["big", "small"]);
+  });
+
+  it("アバターには当たらない", () => {
+    expect(
+      images(
+        "<div><figure id=avatar><div><span><a><img></a></span></div></figure></div><div><figure id=big><button><img></button></figure></div>",
+      ),
+    ).toEqual(["big"]);
   });
 });
 
