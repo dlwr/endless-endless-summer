@@ -20,6 +20,8 @@ export const LONG_BODY = `${LONG_POST} > div > header + div, ${LONG_POST} > head
 // :has() は入れ子にできない。入れ子にするとルールごと無視される。
 const FILL_CSS = `
 ${ROOT} { overflow-x: clip; }
+/* 100vw はスクロールバー幅を含む。html を clip すると body の overflow がビューポートに伝播せず body にも枠ができる */
+${ROOT}, ${ROOT} body { scrollbar-width: none; }
 ${ROOT} [role=banner], ${ROOT} aside { display: none !important; }
 ${ROOT} div:has(> main) { padding: 0 !important; }
 ${ROOT} div:has(> div > main), ${ROOT} div:has(> div > div > main) {
