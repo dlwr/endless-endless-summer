@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFillMode, FILL_IMAGE, LONG_BODY } from "./fill-mode";
+import {
+  createFillMode,
+  FILL_IMAGE,
+  FILL_STRETCH,
+  LONG_BODY,
+} from "./fill-mode";
 
 const applied = () => document.documentElement.classList.contains("ees-fill");
 
@@ -261,6 +266,30 @@ describe("最大化する画像のセレクタ", () => {
         "<div><figure id=avatar><div><span><a><img></a></span></div></figure></div><div><figure id=big><button><img></button></figure></div>",
       ),
     ).toEqual(["big"]);
+  });
+});
+
+describe("画像と一緒に引き伸ばす要素のセレクタ", () => {
+  const stretched = (html: string) => {
+    document.documentElement.className = "ees-fill";
+    document.body.innerHTML = `<article><div>${html}</div></article>`;
+    return [...document.querySelectorAll(FILL_STRETCH)].map((el) => el.id);
+  };
+
+  it("画像とその祖先に当たる", () => {
+    expect(
+      stretched(
+        "<figure><button id=open><span id=wrap><img id=img></span></button></figure>",
+      ),
+    ).toEqual(["open", "wrap", "img"]);
+  });
+
+  it("ALT ボタンには当たらない", () => {
+    expect(
+      stretched(
+        "<figure><button id=open><img id=img></button><button id=alt>ALT</button></figure>",
+      ),
+    ).toEqual(["open", "img"]);
   });
 });
 
